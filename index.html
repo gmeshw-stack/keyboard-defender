@@ -1,0 +1,2380 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鍵鼠防衛戰 - 檔案管理特訓</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', 'Noto Sans TC', sans-serif;
+            background-color: #0f172a;
+            user-select: none;
+            -webkit-touch-callout: none;
+            transition: background-color 0.15s ease;
+        }
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+        .heart { transition: all 0.3s ease; }
+        .heart.lost { opacity: 0.2; filter: grayscale(100%); transform: scale(0.8); }
+        @keyframes shake {
+            0%, 100% { transform: translate(0, 0) rotate(0deg); }
+            20% { transform: translate(-3px, 2px) rotate(-1deg); }
+            40% { transform: translate(3px, -2px) rotate(1deg); }
+            60% { transform: translate(-3px, -2px) rotate(0deg); }
+            80% { transform: translate(3px, 2px) rotate(-1deg); }
+        }
+        .shake { animation: shake 0.3s; }
+        .upgrade-card:hover {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            transform: translateY(-5px);
+            border-color: #60a5fa;
+        }
+        #hiddenInput { position: absolute; top: 0; left: 0; opacity: 0; pointer-events: none; z-index: -1; }
+        #weaponListTray div { transition: all 0.3s ease; }
+        
+        /* 滾動條美化 */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="relative text-white" oncontextmenu="return false;">
+
+    <!-- 遊戲畫布 -->
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- 隱藏輸入框 -->
+    <input type="text" id="hiddenInput" autocomplete="off">
+
+    <!-- 戰術選單 (滑鼠右鍵) -->
+    <div id="tacticalMenu" class="absolute hidden flex-col gap-1 bg-slate-800/95 border border-slate-600 rounded-lg p-2 shadow-2xl z-50 pointer-events-auto text-sm backdrop-blur-md">
+        <button id="btnGrenadeAP" class="hover:bg-red-600 text-red-100 font-bold px-4 py-2 rounded text-left transition-colors border border-red-900/50 shadow-sm">🎯 穿甲榴彈 (高傷單體)</button>
+        <button id="btnGrenadeFrag" class="hover:bg-orange-600 text-orange-100 font-bold px-4 py-2 rounded text-left transition-colors border border-orange-900/50 shadow-sm">💥 破片榴彈 (廣域低傷)</button>
+        <button id="btnGrenadeStun" class="hover:bg-yellow-600 text-yellow-100 font-bold px-4 py-2 rounded text-left transition-colors border border-yellow-900/50 shadow-sm">⚡ 閃光榴彈 (廣域癱瘓)</button>
+    </div>
+
+    <!-- 塔放置提示橫幅 (合作模式用) -->
+    <div id="placementBanner" class="absolute top-24 left-1/2 -translate-x-1/2 bg-blue-600/90 text-white px-8 py-4 rounded-full text-xl md:text-2xl font-black shadow-[0_0_20px_rgba(37,99,235,0.8)] z-50 hidden animate-bounce pointer-events-none border-2 border-white text-center w-max max-w-full">
+        請點擊您的防區畫面放置「個人防禦塔」！
+    </div>
+
+    <!-- UI 介面層 -->
+    <div id="uiLayer" class="absolute top-0 left-0 w-full h-full pointer-events-none flex flex-col justify-between p-4 md:p-6 z-10 hidden">
+        <!-- 頂部資訊 -->
+        <div class="flex justify-between items-start">
+            <div class="bg-slate-800/80 p-3 md:p-4 rounded-xl border border-slate-600 shadow-lg backdrop-blur-sm pointer-events-auto flex flex-col gap-2 min-w-[250px] max-w-[40%]">
+                <div class="flex justify-between items-center mb-1">
+                    <h1 class="text-lg md:text-xl font-bold text-blue-400" id="modeTitle">單人防禦</h1>
+                    <span id="roomCodeDisplay" class="text-xs font-mono bg-slate-900 px-2 py-1 rounded text-slate-400 hidden"></span>
+                </div>
+                <div class="flex justify-between items-end">
+                    <span class="text-sm text-slate-300" id="levelLabel">等級 <span id="levelDisplay" class="font-bold text-white">1</span></span>
+                    <span class="text-sm text-slate-300">分數: <span id="scoreDisplay" class="font-black text-yellow-400">0</span></span>
+                </div>
+                <!-- 經驗值條 (合作模式隱藏) -->
+                <div id="expContainer" class="w-full bg-slate-700 rounded-full h-2.5 mt-1 overflow-hidden border border-slate-600">
+                    <div id="expBar" class="bg-blue-500 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <div class="text-xs text-slate-400 mt-2">目前武裝:</div>
+                <div id="weaponListTray" class="flex gap-2 flex-wrap mt-1"></div>
+            </div>
+            
+            <!-- 合作模式小地圖 -->
+            <div id="minimapContainer" class="hidden absolute left-1/2 -translate-x-1/2 top-4 w-[300px] h-[30px] bg-slate-900/80 border-2 border-slate-600 rounded-lg shadow-lg overflow-hidden pointer-events-auto">
+                <canvas id="minimapCanvas" width="300" height="30"></canvas>
+            </div>
+
+            <!-- 個人血量 -->
+            <div id="hpContainer" class="flex gap-1 md:gap-2 bg-slate-800/80 p-3 md:p-4 rounded-xl border border-slate-600 shadow-lg backdrop-blur-sm flex-wrap max-w-[35%] justify-end pointer-events-auto">
+            </div>
+        </div>
+
+        <!-- 底部提示 -->
+        <div class="flex justify-center w-full mt-auto">
+            <div id="weaponTip" class="bg-slate-900/90 px-6 py-3 rounded-full border border-slate-700 shadow-2xl text-sm backdrop-blur-md text-green-300 font-bold tracking-wide animate-pulse">
+                提示：移動滑鼠用雷射掃掠敵人！
+            </div>
+        </div>
+    </div>
+
+    <!-- 主選單畫面 -->
+    <div id="startModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/90 backdrop-blur-sm flex flex-col items-center justify-center z-50 pointer-events-auto overflow-y-auto py-8">
+        <div class="bg-slate-800 p-8 rounded-2xl border border-slate-600 shadow-2xl max-w-4xl w-full text-center flex flex-col md:flex-row gap-8 items-stretch mt-auto mb-auto">
+            
+            <!-- 左側說明 -->
+            <div class="flex-1 text-left flex flex-col">
+                <h2 class="text-4xl font-black text-blue-400 mb-2">鍵鼠防衛戰</h2>
+                <h3 class="text-xl text-yellow-400 mb-4 font-bold">ROGUE-LIKE 檔案特訓</h3>
+                <div class="text-slate-300 leading-relaxed bg-slate-900 p-4 rounded-xl border border-slate-700 flex-1 overflow-y-auto max-h-64">
+                    <p class="mb-2">⚠️ 系統警告：大量垃圾檔案試圖癱瘓主機！</p>
+                    <ul class="list-disc pl-5 space-y-2 text-sm mb-4">
+                        <li>使用 15 種不同的「滑鼠與鍵盤技巧」消滅檔案。</li>
+                        <li><span class="text-green-400">闖關教學</span>：循序漸進練習每一把武器，破關拿證書。</li>
+                        <li><span class="text-blue-400">單人模式</span>：擊殺敵人獲取經驗升級，挑戰高分。</li>
+                        <li><span class="text-purple-400">合作模式</span>：每位玩家佈署防禦塔，共同保護右方的主機！</li>
+                    </ul>
+                    <div class="grid grid-cols-2 gap-2 text-xs text-slate-400 bg-black/30 p-2 rounded">
+                        <div><b class="text-blue-400">雷射</b>: 游標掃掠</div>
+                        <div><b class="text-orange-400">炸彈</b>: 左鍵拖曳放開</div>
+                        <div><b class="text-purple-400">爆彈</b>: 鍵盤打字引爆</div>
+                        <div><b class="text-yellow-500">機槍</b>: 按住左鍵</div>
+                        <div><b class="text-teal-400">光牆</b>: 左鍵拖曳畫線</div>
+                        <div><b class="text-sky-400">滾輪</b>: 滑動滾輪</div>
+                        <div><b class="text-rose-500">剪下</b>: Ctrl+X (X斬)</div>
+                        <div><b class="text-indigo-400">複製</b>: Ctrl+C (護罩)</div>
+                        <div><b class="text-fuchsia-400">貼上</b>: 按住Ctrl+V</div>
+                        <div><b class="text-cyan-400">反射</b>: 左鍵連點(反彈)</div>
+                        <div><b class="text-indigo-300">休眠</b>: 空白鍵(暫停)</div>
+                        <div><b class="text-green-400">重整</b>: @(全擊退)</div>
+                        <div><b class="text-red-400">刪除</b>: Delete(點殺)</div>
+                        <div><b class="text-amber-500">執行</b>: Enter(直擊光束)</div>
+                        <div><b class="text-slate-400">選單</b>: 右鍵(戰術榴彈)</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 右側選單 -->
+            <div class="flex-1 flex flex-col justify-center gap-3">
+                <div id="authStatus" class="text-sm text-yellow-400 animate-pulse mb-1">正在連線至國防網路...</div>
+                
+                <button id="btnTutorial" class="btn-menu bg-green-600 hover:bg-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]">
+                    🎓 武器闖關教學
+                </button>
+
+                <button id="btnSingle" class="btn-menu bg-blue-600 hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.5)]">
+                    🚀 單人防禦特訓
+                </button>
+
+                <button id="btnLeaderboard" class="btn-menu bg-yellow-600 hover:bg-yellow-500 shadow-[0_0_15px_rgba(202,138,4,0.5)] text-slate-900">
+                    🏆 榮譽排行榜
+                </button>
+                
+                <div class="h-px bg-slate-700 w-full my-2"></div>
+                
+                <button id="btnHost" class="btn-menu bg-purple-600 hover:bg-purple-500 shadow-[0_0_15px_rgba(147,51,234,0.5)] opacity-50 cursor-not-allowed" disabled>
+                    👑 建立合作防線
+                </button>
+                
+                <div class="flex gap-2 mt-1">
+                    <input type="text" id="joinCode" placeholder="輸入房間代碼" class="flex-1 bg-slate-900 border border-slate-600 rounded-lg px-4 text-center font-mono text-xl uppercase" maxlength="5">
+                    <button id="btnJoin" class="btn-menu bg-teal-600 hover:bg-teal-500 shadow-[0_0_15px_rgba(13,148,136,0.5)] opacity-50 cursor-not-allowed w-auto px-6" disabled>
+                        加入
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <style>
+            .btn-menu {
+                color: white; font-weight: bold; padding: 0.8rem; border-radius: 0.75rem; transition: all 0.2s; font-size: 1.1rem;
+            }
+            .btn-menu:not(:disabled):hover { transform: scale(1.02); }
+            .btn-menu:not(:disabled):active { transform: scale(0.98); }
+        </style>
+    </div>
+
+    <!-- 排行榜 Modal -->
+    <div id="leaderboardModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center z-50 hidden pointer-events-auto overflow-y-auto py-8">
+        <div class="bg-slate-800 p-6 md:p-8 rounded-2xl border-2 border-yellow-500 shadow-[0_0_30px_rgba(234,179,8,0.3)] max-w-4xl w-full">
+            <h2 class="text-3xl font-black text-yellow-400 mb-6 text-center flex items-center justify-center gap-3">
+                🏆 國防網路全球榮譽榜 🏆
+            </h2>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+                <!-- 單人排行 -->
+                <div class="bg-slate-900 rounded-xl p-4 border border-slate-700">
+                    <h3 class="text-xl font-bold text-blue-400 mb-4 text-center">單人防禦排行榜 (Top 10)</h3>
+                    <div id="lbSingle" class="overflow-x-auto text-sm text-slate-300">載入中...</div>
+                </div>
+                <!-- 合作排行 -->
+                <div class="bg-slate-900 rounded-xl p-4 border border-slate-700">
+                    <h3 class="text-xl font-bold text-purple-400 mb-4 text-center">合作防線排行榜 (Top 10)</h3>
+                    <div id="lbCoop" class="overflow-x-auto text-sm text-slate-300">載入中...</div>
+                </div>
+            </div>
+
+            <div class="mt-8 flex justify-center">
+                <button onclick="document.getElementById('leaderboardModal').classList.add('hidden'); document.getElementById('startModal').classList.remove('hidden');" class="bg-slate-600 hover:bg-slate-500 text-white font-bold py-3 px-10 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 text-lg">
+                    返回主選單
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 合作模式大廳 -->
+    <div id="lobbyModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center z-50 hidden pointer-events-auto">
+        <div class="bg-slate-800 p-8 rounded-2xl border-2 border-purple-500 shadow-[0_0_30px_rgba(147,51,234,0.3)] max-w-md w-full text-center">
+            <h2 class="text-3xl font-black text-purple-400 mb-2">合作防線大廳</h2>
+            <div class="text-slate-400 mb-6">房間代碼：<span id="lobbyCodeDisplay" class="text-white font-mono text-2xl bg-black px-3 py-1 rounded select-all"></span></div>
+            
+            <div class="bg-slate-900 rounded-xl p-4 mb-6 text-left h-48 overflow-y-auto" id="lobbyPlayers">
+                <!-- 玩家列表 -->
+            </div>
+            
+            <p id="lobbyWaitText" class="text-yellow-400 mb-4 text-sm animate-pulse hidden">等待房主開始遊戲...</p>
+            <button id="btnStartCoop" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-4 rounded-xl shadow-lg transition-transform transform hover:scale-105 active:scale-95 text-lg hidden">
+                開始作戰 (全員抵達)
+            </button>
+            <button id="btnLeaveLobby" class="mt-4 text-slate-400 hover:text-white underline text-sm">離開房間</button>
+        </div>
+    </div>
+
+    <!-- 升級選擇畫面 -->
+    <div id="upgradeModal" class="absolute top-0 left-0 w-full h-full bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-40 hidden pointer-events-auto">
+        <div class="max-w-5xl w-full p-4 flex flex-col items-center">
+            <h2 id="upgradeTitle" class="text-3xl md:text-4xl font-black text-yellow-400 mb-2 text-center drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">系統升級！選擇一項強化</h2>
+            <p id="upgradeWaitText" class="text-slate-300 mb-6 h-6"></p>
+            <div id="upgradeOptions" class="grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+                <!-- 動態選項 -->
+            </div>
+            <button id="btnReroll" class="hidden mt-8"></button>
+        </div>
+    </div>
+
+    <!-- 闖關教學簡報畫面 -->
+    <div id="tutorialBriefingModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-50 hidden pointer-events-auto py-8">
+        <div class="bg-slate-800 p-8 rounded-2xl border-2 border-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)] max-w-lg text-center w-full">
+            <div class="text-6xl mb-4 animate-bounce drop-shadow-[0_0_15px_rgba(59,130,246,0.8)]" id="tbIcon">🖱️</div>
+            <h2 class="text-3xl font-black text-blue-400 mb-4" id="tbTitle">武器名稱</h2>
+            <div class="bg-slate-900 p-5 rounded-xl border border-slate-700 mb-6 text-left shadow-inner">
+                <p class="text-yellow-400 font-bold mb-2 flex items-center gap-2"><span>💻</span> 現實電腦對應操作：</p>
+                <p class="text-slate-300 text-sm leading-relaxed" id="tbDesc">說明內容...</p>
+            </div>
+            <button id="btnStartTutorialStage" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg">
+                開始實戰演練
+            </button>
+        </div>
+    </div>
+
+    <!-- 結業證書畫面 -->
+    <div id="certificateModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-50 hidden pointer-events-auto py-8">
+        <div class="bg-slate-800 p-8 md:p-12 rounded-2xl border-4 border-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.5)] max-w-xl text-center w-full">
+            <h2 class="text-4xl md:text-5xl font-black text-yellow-400 mb-6 flex justify-center items-center gap-4">
+                🏆 結業證書 🏆
+            </h2>
+            <p class="text-xl text-slate-300 mb-6 leading-relaxed">
+                恭喜您完成了所有 15 種武器的殘酷特訓！<br>
+                您現在已經成為一名合格的<br><strong class="text-white text-3xl mt-2 block">鍵盤滑鼠防衛專家</strong>
+            </p>
+            <div class="text-slate-400 mb-8 font-mono bg-black/30 p-4 rounded-lg inline-block text-left">
+                認證機構：國防網路防衛中心<br>
+                核發日期：<span id="certDate" class="text-white"></span>
+            </div>
+            <button onclick="window.location.reload()" class="bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-black py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-xl">
+                領取證書並返回主選單
+            </button>
+        </div>
+    </div>
+
+    <!-- 遊戲結束畫面 -->
+    <div id="gameOverModal" class="absolute top-0 left-0 w-full h-full bg-red-900/95 backdrop-blur-md flex items-center justify-center z-50 hidden pointer-events-auto">
+        <div class="bg-slate-900 p-8 rounded-2xl border-2 border-red-600 shadow-2xl max-w-md text-center w-full">
+            <h2 class="text-5xl font-black text-red-500 mb-2" id="goTitle">防禦失敗！</h2>
+            <p class="text-xl text-slate-300 mb-2" id="goDesc">防禦進度: <span id="finalLevel" class="text-white font-bold">1</span></p>
+            <p class="text-xl text-slate-300 mb-8" id="goScoreBox">最終分數: <span id="finalScore" class="text-yellow-400 font-bold text-4xl">0</span></p>
+            
+            <div id="scoreSubmitDiv" class="mb-6 flex flex-col gap-3 hidden">
+                <input type="text" id="playerNameGameOver" placeholder="輸入您的暱稱以登錄排行榜" class="w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-3 text-center font-bold text-white focus:outline-none focus:border-yellow-500" maxlength="12">
+                <button id="btnSubmitScore" class="bg-green-600 hover:bg-green-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg">
+                    上傳分數並返回
+                </button>
+            </div>
+
+            <button id="restartBtn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg">
+                返回主選單
+            </button>
+        </div>
+    </div>
+
+    <!-- Firebase 與遊戲主邏輯 -->
+    <script type="module">
+        /** ====================
+         *  Firebase 引入與初始化
+         *  ==================== */
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'def-keyboard-defense';
+        
+        // --- 注入您專屬的 Firebase 設定檔 ---
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
+            apiKey: "AIzaSyBjP-jQ9dXTmwSykS9LlpKgoYursC3Lafg",
+            authDomain: "keyboard-defender.firebaseapp.com",
+            projectId: "keyboard-defender",
+            storageBucket: "keyboard-defender.firebasestorage.app",
+            messagingSenderId: "118432745789",
+            appId: "1:118432745789:web:1fc9d9486e5fa7b429dd54"
+        };
+        
+        let app, db, auth, userId;
+        let isFirebaseReady = false;
+
+        try {
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+            
+            const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+            if (token) {
+                await signInWithCustomToken(auth, token);
+            } else {
+                await signInAnonymously(auth);
+            }
+            userId = auth.currentUser.uid;
+            isFirebaseReady = true;
+            document.getElementById('authStatus').innerText = '連線成功！系統就緒。';
+            document.getElementById('authStatus').classList.replace('text-yellow-400', 'text-green-400');
+            document.getElementById('btnHost').disabled = false;
+            document.getElementById('btnHost').classList.remove('opacity-50', 'cursor-not-allowed');
+            document.getElementById('btnJoin').disabled = false;
+            document.getElementById('btnJoin').classList.remove('opacity-50', 'cursor-not-allowed');
+        } catch (e) {
+            console.error("Firebase init failed", e);
+            document.getElementById('authStatus').innerText = '連線失敗，僅開放單人/闖關模式。';
+            document.getElementById('authStatus').classList.replace('text-yellow-400', 'text-red-400');
+        }
+
+        /** ====================
+         *  音效系統
+         *  ==================== */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const now = audioCtx.currentTime;
+            
+            if (type === 'laser') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(800, now); osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+                gain.gain.setValueAtTime(0.015, now); gain.gain.exponentialRampToValueAtTime(0.005, now + 0.05);
+                osc.start(now); osc.stop(now + 0.05);
+            } else if (type === 'shoot') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(600, now); osc.frequency.exponentialRampToValueAtTime(200, now + 0.1);
+                gain.gain.setValueAtTime(0.05, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'destroy') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(150, now); osc.frequency.exponentialRampToValueAtTime(30, now + 0.2);
+                gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.start(now); osc.stop(now + 0.2);
+            } else if (type === 'hurt') {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, now); osc.frequency.linearRampToValueAtTime(50, now + 0.3);
+                gain.gain.setValueAtTime(0.3, now); gain.gain.linearRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'levelup') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(400, now); osc.frequency.setValueAtTime(600, now + 0.1); osc.frequency.setValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.2, now); gain.gain.linearRampToValueAtTime(0, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'bomb') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(50, now); osc.frequency.exponentialRampToValueAtTime(10, now + 0.4);
+                gain.gain.setValueAtTime(0.3, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'wave') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(300, now); osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+                gain.gain.setValueAtTime(0.15, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
+            } else if (type === 'type') {
+                osc.type = 'sine'; osc.frequency.setValueAtTime(1200, now); osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now); osc.stop(now + 0.1);
+            }
+        }
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const mapCanvas = document.getElementById('minimapCanvas');
+        const mapCtx = mapCanvas.getContext('2d');
+        const hiddenInput = document.getElementById('hiddenInput');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        /** ====================
+         *  武器與被動資料結構 (精準 14 把武器，皆為 3 項升級設定)
+         *  ==================== */
+        const WEAPONS = {
+            'laser': { id: 'laser', name: '雷射滑鼠', short: '雷射', tip: '【預設開啟】滑鼠游標滑過敵人造成持續傷害。', color: '#3b82f6', upgrades: [{ id: 'laser_width', name: '寬度強化', desc: '雷射變寬', max: 3 }, { id: 'laser_freq', name: '高頻雷射', desc: '傷害提升', max: 4 }, { id: 'laser_split', name: '光譜折射', desc: '自動折射', max: 3 }] },
+            'machinegun': { id: 'machinegun', name: '機槍', short: '機槍', tip: '【按住左鍵】連續掃射。', color: '#facc15', upgrades: [{ id: 'mg_speed', name: '射速提升', desc: '射擊加快', max: 4 }, { id: 'mg_pierce', name: '穿甲彈', desc: '穿透敵人', max: 3 }, { id: 'mg_scatter', name: '散射機槍', desc: '增加子彈', max: 3 }] },
+            'laserwall': { id: 'laserwall', name: '雷射牆', short: '光牆', tip: '【按住左鍵拖曳】畫出阻擋並傷害敵人的光牆。', color: '#14b8a6', upgrades: [{ id: 'wall_time', name: '持久電池', desc: '存續延長', max: 3 }, { id: 'wall_dmg', name: '高能電網', desc: '傷害提升', max: 4 }, { id: 'wall_stun', name: '致盲光牆', desc: '觸碰暈眩', max: 3 }] },
+            'bomb': { id: 'bomb', name: '拖曳炸彈', short: '炸彈', tip: '【按住左鍵拖曳】放開投擲炸彈。', color: '#f97316', upgrades: [{ id: 'bomb_radius', name: '大當量', desc: '範圍傷害增加', max: 4 }, { id: 'bomb_fire', name: '燃燒地帶', desc: '留下燃燒區', max: 3 }, { id: 'bomb_cluster', name: '集束炸彈', desc: '分裂追蹤', max: 4 }] },
+            'typing': { id: 'typing', name: '字母爆彈', short: '爆彈', tip: '【鍵盤打字】輸入場上字母引發大範圍爆炸。', color: '#a855f7', upgrades: [{ id: 'type_dmg', name: '超頻鍵入', desc: '傷害提升', max: 5 }, { id: 'type_heal', name: '吸血程式', desc: '機率補血', max: 3 }, { id: 'type_aoe', name: '語法擴張', desc: '範圍擴大', max: 3 }] },
+            'scroll': { id: 'scroll', name: '滾輪風暴', short: '滾輪', tip: '【滑鼠滾輪】以玩家為中心釋放向外擴散的衝擊波。', color: '#0ea5e9', upgrades: [{ id: 'scroll_size', name: '風暴擴張', desc: '範圍變大', max: 4 }, { id: 'scroll_dmg', name: '強烈氣旋', desc: '傷害提升', max: 4 }, { id: 'scroll_push', name: '排風系統', desc: '擊退敵人', max: 3 }] },
+            'ctrlx': { id: 'ctrlx', name: 'Ctrl+X 剪下', short: '剪下', tip: '【Ctrl+X】產生 X 字剪裁。', color: '#f43f5e', upgrades: [{ id: 'cut_size', name: '全畫面剪裁', desc: '範圍超大', max: 1 }, { id: 'cut_bleed', name: '資料碎裂', desc: '敵人流血', max: 3 }, { id: 'cut_steal', name: '竊取', desc: '分數機率提升', max: 3 }] },
+            'ctrlc': { id: 'ctrlc', name: 'Ctrl+C 複製', short: '複製', tip: '【Ctrl+C】產生絕對毀滅保護罩，觸碰者死。', color: '#6366f1', upgrades: [{ id: 'copy_dur', name: '長期備份', desc: '時間延長', max: 3 }, { id: 'copy_reflect', name: '惡意反彈', desc: '反彈增加', max: 4 }, { id: 'copy_heal', name: '還原點', desc: '機率補血', max: 3 }] },
+            'ctrlv': { id: 'ctrlv', name: 'Ctrl+V 貼上', short: '貼上', tip: '【按住 Ctrl+V】產生 V 字收縮斬。', color: '#d946ef', upgrades: [{ id: 'paste_size', name: '巨量貼上', desc: '初始範圍大', max: 3 }, { id: 'paste_dmg', name: '覆寫資料', desc: '傷害提升', max: 5 }, { id: 'paste_stun', name: '格式錯誤', desc: '命中暈眩', max: 3 }] },
+            'bounce': { id: 'bounce', name: '雙擊反射彈', short: '反射', tip: '【左鍵連點兩次】發射會在畫面邊緣反彈的高能子彈。', color: '#06b6d4', upgrades: [{ id: 'bounce_dmg', name: '高能彈頭', desc: '傷害大幅提升', max: 5 }, { id: 'bounce_life', name: '彈性材質', desc: '存活延長', max: 3 }, { id: 'bounce_cd', name: '快速填裝', desc: '冷卻縮短', max: 4 }] },
+            'space': { id: 'space', name: '空白鍵 休眠', short: '休眠', tip: '【空白鍵】發動，強制全畫面敵人暫停並損失一半生命！', color: '#8b5cf6', upgrades: [{ id: 'space_time', name: '深度睡眠', desc: '暈眩延長', max: 3 }, { id: 'space_heal', name: '系統維護', desc: '機率補血', max: 3 }, { id: 'space_cd', name: '高效排程', desc: '冷卻縮短', max: 4 }] },
+            'at': { id: 'at', name: '@ 重新整理', short: '@重整', tip: '【@】(Shift+2) 將全場擊退！', color: '#22c55e', upgrades: [{ id: 'at_dmg', name: '暴力重整', desc: '傷害提升', max: 4 }, { id: 'at_heal', name: '記憶體釋放', desc: '補血機率', max: 3 }, { id: 'at_stun', name: '載入延遲', desc: '擊退暈眩', max: 3 }] },
+            'del': { id: 'del', name: 'Delete 刪除', short: '刪除', tip: '【Delete】將游標處的檔案強制單點刪除。', color: '#ef4444', upgrades: [{ id: 'del_dmg', name: '深度刪除', desc: '大幅提升單體傷害', max: 5 }, { id: 'del_aoe', name: '批次刪除', desc: '產生小範圍爆炸', max: 3 }, { id: 'del_cd', name: '快取清除', desc: '冷卻縮短', max: 4 }] },
+            'enter': { id: 'enter', name: 'Enter 執行', short: '執行', tip: '【Enter】從主機發射毀滅性直擊光束到游標。', color: '#f59e0b', upgrades: [{ id: 'enter_dmg', name: '高壓執行', desc: '傷害大幅提升', max: 5 }, { id: 'enter_width', name: '寬頻光束', desc: '光束變寬', max: 3 }, { id: 'enter_stun', name: '系統停擺', desc: '命中暈眩', max: 3 }] },
+            'select': { id: 'select', name: '戰術選單', short: '選單', tip: '【滑鼠右鍵】開啟選單，左鍵選擇發射三種不同效果的戰術榴彈。', color: '#94a3b8', upgrades: [{ id: 'sel_dmg', name: '穿甲彈頭', desc: '穿甲榴彈傷害大幅提升', max: 5 }, { id: 'sel_aoe', name: '高爆炸藥', desc: '破片榴彈範圍提升', max: 4 }, { id: 'sel_stun', name: '強效閃光', desc: '閃光榴彈暈眩延長', max: 3 }] }
+        };
+
+        const PASSIVES = {
+            'cd': { id: 'cd', name: 'CPU超頻', short: '超頻', desc: '技能冷卻時間縮短 15%', max: 3, color: '#f87171' },
+            'crit': { id: 'crit', name: '算力溢出', short: '爆擊', desc: '攻擊有 15% 機率造成兩倍傷害', max: 4, color: '#60a5fa' },
+            'dodge': { id: 'dodge', name: '防毒軟體', short: '防毒', desc: '防禦塔有 10% 機率阻擋傷害', max: 4, color: '#34d399' },
+            'slow': { id: 'slow', name: '限制頻寬', short: '限速', desc: '敵人基礎跑速降低 10%(團隊共享)', max: 4, color: '#a78bfa' },
+            'thorns': { id: 'thorns', name: '反制協議', short: '反傷', desc: '個人塔受擊時全場敵人受大量傷害', max: 3, color: '#f43f5e' },
+            'autoclick': { id: 'autoclick', name: '背景處理', short: '背景', desc: '定期自動電擊防區內一名敵人', max: 5, color: '#2dd4bf' },
+            'cloud': { id: 'cloud', name: '雲端同步', short: '雲端', desc: '每 60 秒個人塔自動恢復 1 點血量', max: 1, color: '#38bdf8' },
+            'aura': { id: 'aura', name: '散熱系統', short: '散熱', desc: '自身塔產生力場，進入的敵人大幅減速', max: 3, color: '#94a3b8' },
+            'reroll': { id: 'reroll', name: '動態記憶體', short: '洗牌', desc: '立即獲得 3 次升級重置機會', max: 999, color: '#f472b6' }
+        };
+
+        const TUTORIAL_WEAPONS = ['laser', 'machinegun', 'bomb', 'laserwall', 'typing', 'scroll', 'ctrlx', 'ctrlc', 'ctrlv', 'bounce', 'space', 'at', 'del', 'enter', 'select'];
+        const TYPING_WORDS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+
+        const TUTORIAL_INFO = {
+            'laser': { icon: '🖱️', title: '【雷射滑鼠】游標掃掠', desc: '對應現實中的「游標操作」。滑鼠游標是您與電腦互動的最基本方式，用於精準定位、選取目標與滑動檢視。在防衛戰中，它是一把持續輸出的高能光束劍！' },
+            'machinegun': { icon: '🖱️', title: '【機槍】按住左鍵', desc: '對應現實中的「拖曳選取/連續點擊」。當您需要大量圈選檔案，或是在資料夾中快速執行連續動作時使用。在遊戲裡化為傾瀉而出的彈幕！' },
+            'bomb': { icon: '🖱️', title: '【拖曳炸彈】拖放操作', desc: '對應現實中的「拖放檔案 (Drag & Drop)」。您常常按住檔案將其拖移到另一個資料夾，這需要精準的放開時機。現在，請把炸彈精準拖放到敵人頭上！' },
+            'laserwall': { icon: '🖱️', title: '【雷射牆】框選範圍', desc: '對應現實中的「框選 (Marquee Selection)」。在桌面上畫出一個大框來選取多個檔案。在此特訓中，您畫出的線條將成為阻擋敵人的高能光網！' },
+            'typing': { icon: '⌨️', title: '【字母爆彈】鍵盤輸入', desc: '對應現實中的「文字打字」。無論是寫程式還是輸入指令，打字速度決定了您的工作效率。精準敲擊畫面上的字母，引發全圖陣列爆炸吧！' },
+            'scroll': { icon: '↕️', title: '【滾輪風暴】頁面捲動', desc: '對應現實中的「滑鼠滾輪 (Scroll)」。用來快速瀏覽長篇文件或網頁，排除無用的資訊。滑動滾輪，在遊戲中釋放推開一切的排風氣旋！' },
+            'ctrlx': { icon: '✂️', title: '【Ctrl+X】剪下', desc: '對應現實中的快捷鍵「剪下」。將目標檔案從原處移除並存入暫存區。在戰場上，這是能將敵人資料瞬間碎裂的交叉剪裁攻擊！' },
+            'ctrlc': { icon: '📄', title: '【Ctrl+C】複製', desc: '對應現實中的快捷鍵「複製」。為資料建立一份完美備份，以防遺失。在防衛系統中，複製能為您的主機建立無堅不摧的毀滅保護罩，瞬間刪除所有碰觸的敵人！' },
+            'ctrlv': { icon: '📋', title: '【Ctrl+V】貼上', desc: '對應現實中的快捷鍵「貼上」。將剪貼簿的資料強力寫入目標位置。在戰鬥中，按住 Ctrl+V 將對目標區域進行毀滅性的資料強制覆寫！' },
+            'bounce': { icon: '🖱️', title: '【雙擊反射彈】左鍵連點', desc: '對應現實中的「雙擊 (Double Click)」。用來開啟檔案或執行程式，是系統中最具決定性的操作。連點兩下，發射會在系統邊界反彈的高能子彈！' },
+            'space': { icon: '⏸️', title: '【空白鍵】休眠暫停', desc: '對應現實中看影片或聽音樂時的「暫停/播放」。這個巨大的按鍵能瞬間中斷當前所有進程。按下空白鍵，讓畫面內所有的惡意程式陷入深度休眠，並強制毀滅其一半的生命值！' },
+            'at': { icon: '🔄', title: '【@】重新整理', desc: '對應現實中的「標記/重新載入」。向全系統發送強制重整指令，清除畫面卡頓。使用 @ 鍵，強制將所有逼近的敵人全數向外擊退！' },
+            'del': { icon: '🗑️', title: '【Delete】刪除', desc: '對應現實中的「刪除檔案」。直接將不要的垃圾資料丟入資源回收桶。游標指準目標，按下 Delete，將其從這個世界上強制抹除！' },
+            'enter': { icon: '↵', title: '【Enter】執行指令', desc: '對應現實中的「確認/執行 (Enter)」。賦予系統最高權限的直擊操作。按下 Enter，從主機直接發射最霸道的毀滅光束！' },
+            'select': { icon: '⚙️', title: '【戰術選單】右鍵內容', desc: '對應現實中的「右鍵選單 (Context Menu)」。能針對不同情況呼叫出對應的進階操作。點擊右鍵，根據戰況選擇最適合的戰術榴彈！' }
+        };
+
+        let state = {
+            mode: 'single', // 'single', 'coop', 'tutorial'
+            isPlaying: false, isPaused: false, isDead: false,
+            placingTower: false, towerPlaced: false, towerX: 0, towerY: 0,
+            score: 0, level: 1, wave: 1, waveSpawned: 0, waveTotal: 0, waveTimer: 0,
+            exp: 0, expNeeded: 50,
+            hp: 3, maxHp: 3, mainHp: 20, rerolls: 3,
+            upgradesPending: 0, inUpgradeSession: false,
+            tutorialStage: 0, tutorialKills: 0, tutorialGoal: 10,
+            
+            enemies: [], mapBombs: [], particles: [], bullets: [], walls: [], vweapons: [], beams: [], shield: null, rings: [], bounceBullets: [], grenades: [],
+            spawnRate: 3000, lastSpawnTime: 0, lastBombSpawnTime: 0, timeElapsed: 0,
+            
+            unlockedWeapons: ['laser'],
+            weaponUpgrades: { laser: [], bomb: [], typing: [], ctrlx: [], ctrlc: [], ctrlv: [], space: [], at: [], machinegun: [], laserwall: [], del: [], scroll: [], enter: [], bounce: [], select: [] },
+            passives: { maxHp: 0, cd: 0, crit: 0, dodge: 0, slow: 0, thorns: 0, autoclick: 0, cloud: 0, aura: 0, reroll: 0 },
+            
+            lastAutoclickTime: 0, lastCloudTime: 0,
+            mouseX: -100, mouseY: -100, lastMouseX: -100, lastMouseY: -100, 
+            isDragging: false, isLeftMouseDown: false, ctrlVActive: false,
+            dragStartX: 0, dragStartY: 0, lastWallX: 0, lastWallY: 0, wallDrawStartTime: 0,
+            lastMgShot: 0, lastCtrlXTime: 0, lastCtrlCTime: 0, lastSpaceTime: 0, lastAtTime: 0, lastDelTime: 0, lastScrollTime: 0, lastEnterTime: 0, lastBounceTime: 0, lastCtrlVTime: 0, lastSelectTime: 0,
+            tacticalOpen: false, tacticalX: 0, tacticalY: 0,
+            
+            roomId: null, isHost: false, players: [], playerIndex: 0, playersData: {}, playersHp: {},
+            coopTotalSlow: 0
+        };
+        
+        let unsubRoom = null;
+        let unsubActions = null;
+
+        function getWeaponUpgLevel(wId, uId) { return state.weaponUpgrades[wId] ? state.weaponUpgrades[wId].filter(id => id === uId).length : 0; }
+        function getCD(baseCD) { 
+            if (state.mode === 'tutorial') return 100; // 闖關教學模式下，所有冷卻降至 0.1 秒
+            return baseCD * (1 - (state.passives.cd * 0.15)); 
+        }
+        
+        function getCameraX() {
+            if (state.mode === 'single' || state.mode === 'tutorial') return 0;
+            return state.playerIndex * canvas.width;
+        }
+        function getGameWidth() {
+            if (state.mode === 'single' || state.mode === 'tutorial') return canvas.width;
+            return canvas.width * state.players.length;
+        }
+        
+        // --- 特效與物件類別 ---
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.vx = (Math.random() - 0.5) * 10; this.vy = (Math.random() - 0.5) * 10;
+                this.life = 1.0; this.color = color; this.size = Math.random() * 5 + 2;
+            }
+            update(dt) { this.x += this.vx; this.y += this.vy; this.life -= dt * 0.001; }
+            draw(ctx) { ctx.globalAlpha = Math.max(0, this.life); ctx.fillStyle = this.color; ctx.fillRect(this.x, this.y, this.size, this.size); ctx.globalAlpha = 1.0; }
+        }
+        
+        class WaveRing {
+            constructor(x, y, maxR, color) {
+                this.x = x; this.y = y; this.r = 10; this.maxR = maxR; this.color = color; this.life = 1.0;
+            }
+            update(dt) {
+                this.r += (this.maxR - this.r) * 15 * (dt/1000);
+                this.life -= dt * 0.002;
+            }
+            draw(ctx) {
+                ctx.save(); ctx.globalAlpha = Math.max(0, this.life);
+                ctx.strokeStyle = this.color; ctx.lineWidth = Math.max(0, 4 + 6 * this.life);
+                ctx.beginPath(); ctx.arc(this.x, this.y, Math.max(0, this.r), 0, Math.PI*2); ctx.stroke();
+                ctx.restore();
+            }
+        }
+
+        class Grenade {
+            constructor(sx, sy, tx, ty, type, dmg, r, stun) {
+                this.x = sx; this.y = sy; this.tx = tx; this.ty = ty;
+                this.type = type; this.dmg = dmg; this.r = r; this.stun = stun;
+                this.speed = 1200; 
+                this.life = 1;
+                
+                if (type === 'ap') this.color = '#ef4444';
+                else if (type === 'frag') this.color = '#f97316';
+                else if (type === 'stun') this.color = '#eab308';
+            }
+            update(dt) {
+                if (this.life <= 0) return;
+                let dx = this.tx - this.x;
+                let dy = this.ty - this.y;
+                let dist = Math.hypot(dx, dy);
+                let move = this.speed * (dt / 1000);
+                
+                if (dist <= move) {
+                    this.x = this.tx; this.y = this.ty;
+                    this.explode();
+                    this.life = 0;
+                } else {
+                    this.x += (dx / dist) * move;
+                    this.y += (dy / dist) * move;
+                }
+            }
+            explode() {
+                playSound('bomb');
+                createExplosion(this.x, this.y, this.color, this.type === 'ap' ? 30 : 50);
+                state.rings.push(new WaveRing(this.x, this.y, this.r, this.color));
+                
+                if (this.type === 'ap' || this.type === 'frag') {
+                    if (state.mode === 'coop') sendCoopAction('bomb', {x: this.x, y: this.y, r: this.r, dmg: this.dmg, push: 0});
+                    else state.enemies.slice().forEach(en => { if (Math.hypot(en.x - this.x, en.y - this.y) < this.r) en.takeDamage(this.dmg); });
+                } else if (this.type === 'stun') {
+                    if (state.mode === 'coop') sendCoopAction('aoe_stun', {x: this.x, y: this.y, r: this.r, stun: this.stun});
+                    else state.enemies.slice().forEach(en => { if (Math.hypot(en.x - this.x, en.y - this.y) < this.r) en.stunTime = Math.max(en.stunTime, this.stun); });
+                }
+            }
+            draw(ctx) {
+                ctx.fillStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.arc(this.x, this.y, 6, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, tx, ty, speed, dmg, pierce) {
+                this.x = x; this.y = y;
+                const angle = Math.atan2(ty - y, tx - x);
+                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+                this.dmg = dmg; this.pierce = pierce; this.life = 2000; this.hitIds = new Set();
+            }
+            update(dt) { this.x += this.vx * (dt/16); this.y += this.vy * (dt/16); this.life -= dt; }
+            draw(ctx) {
+                ctx.fillStyle = '#facc15'; ctx.shadowColor = '#facc15'; ctx.shadowBlur = 5;
+                ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+            }
+        }
+
+        class BounceBullet {
+            constructor(x, y, tx, ty, speed, dmg, maxLife) {
+                this.x = x; this.y = y;
+                const angle = Math.atan2(ty - y, tx - x);
+                this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
+                this.dmg = dmg; this.life = maxLife; this.hitIds = new Map();
+            }
+            update(dt, gameWidth, gameHeight) {
+                this.x += this.vx * (dt/1000); this.y += this.vy * (dt/1000); this.life -= dt;
+                if (this.x < 0) { this.x = 0; this.vx *= -1; }
+                if (this.x > gameWidth) { this.x = gameWidth; this.vx *= -1; }
+                if (this.y < 0) { this.y = 0; this.vy *= -1; }
+                if (this.y > gameHeight) { this.y = gameHeight; this.vy *= -1; }
+            }
+            draw(ctx) {
+                ctx.fillStyle = '#06b6d4'; ctx.shadowColor = '#06b6d4'; ctx.shadowBlur = 15;
+                ctx.beginPath(); ctx.arc(this.x, this.y, 7, 0, Math.PI*2); ctx.fill(); 
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(this.x, this.y, 3, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class WallSegment {
+            constructor(x1, y1, x2, y2, maxLife, dmg, stun) {
+                this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
+                this.life = maxLife; this.maxLife = maxLife; this.dmg = dmg; this.stun = stun;
+                this.hitIds = new Set();
+            }
+            update(dt) { this.life -= dt; }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life / this.maxLife);
+                ctx.strokeStyle = '#14b8a6'; ctx.lineWidth = 4; ctx.shadowColor = '#14b8a6'; ctx.shadowBlur = 10;
+                ctx.beginPath(); ctx.moveTo(this.x1, this.y1); ctx.lineTo(this.x2, this.y2); ctx.stroke();
+                ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+            }
+        }
+
+        class VWeapon {
+            constructor(x, y, size, dmg, stun) {
+                this.x = x; this.y = y; this.size = size; this.dmg = dmg; this.stun = stun;
+                this.hitIds = new Set();
+            }
+            update(dt) {
+                let tx = state.towerX;
+                let ty = state.towerY;
+                const angle = Math.atan2(ty - this.y, tx - this.x);
+                this.x += Math.cos(angle) * 300 * (dt/1000);
+                this.y += Math.sin(angle) * 300 * (dt/1000);
+                this.size = Math.max(0, this.size - 100*(dt/1000));
+            }
+            draw(ctx) {
+                ctx.strokeStyle = '#d946ef'; ctx.lineWidth = 6; ctx.shadowColor = '#d946ef'; ctx.shadowBlur = 15;
+                ctx.beginPath(); ctx.moveTo(this.x - this.size/2, this.y - this.size);
+                ctx.lineTo(this.x, this.y); ctx.lineTo(this.x + this.size/2, this.y - this.size); ctx.stroke();
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        class Beam {
+            constructor(x1, y1, x2, y2, width, color) {
+                this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
+                this.width = width; this.color = color; this.life = 200; 
+            }
+            update(dt) { this.life -= dt; }
+            draw(ctx) {
+                ctx.globalAlpha = Math.max(0, this.life / 200);
+                ctx.strokeStyle = this.color; ctx.lineWidth = this.width; ctx.shadowColor = this.color; ctx.shadowBlur = 20;
+                ctx.beginPath(); ctx.moveTo(this.x1, this.y1); ctx.lineTo(this.x2, this.y2); ctx.stroke();
+                ctx.globalAlpha = 1.0; ctx.shadowBlur = 0;
+            }
+        }
+
+        class MapBomb {
+            constructor(camX, fixedX = null, fixedY = null) {
+                const margin = 120;
+                this.x = fixedX !== null ? fixedX : camX + margin + Math.random() * (canvas.width - margin * 2);
+                this.y = fixedY !== null ? fixedY : margin + Math.random() * (canvas.height - margin * 2);
+                this.word = TYPING_WORDS[Math.floor(Math.random() * TYPING_WORDS.length)];
+                this.color = '#a855f7'; this.radius = 25; this.pulse = 0;
+            }
+            update(dt) { this.pulse += dt * 0.005; }
+            draw(ctx) {
+                ctx.save(); ctx.translate(this.x, this.y);
+                ctx.shadowColor = this.color; ctx.shadowBlur = 15 + Math.sin(this.pulse) * 10;
+                ctx.beginPath(); ctx.arc(0, 0, this.radius, 0, Math.PI*2);
+                ctx.fillStyle = '#3b0764'; ctx.fill(); ctx.strokeStyle = this.color; ctx.lineWidth = 3; ctx.stroke();
+                ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.font = 'bold 24px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(this.word, 0, 0); ctx.restore();
+            }
+        }
+        
+        class Enemy {
+            constructor(id) {
+                this.id = id || Math.random().toString(36).substr(2, 9);
+                this.width = 35; this.height = 42; 
+                this.stunTime = 0; this.dotDmg = 0; this.dotTimer = 0; this.dotDuration = 0; this.lastShieldHit = 0;
+                
+                let lvl = state.mode === 'coop' ? state.wave : (state.mode === 'tutorial' ? (state.tutorialStage + 1) : state.level);
+                this.maxHp = lvl === 1 ? 1 : Math.floor(1.5 + lvl / 1.5);
+                if (lvl > 2 && Math.random() < 0.05 + (lvl * 0.01)) this.maxHp *= 3; 
+                if (state.mode === 'tutorial') this.maxHp = 1; // 闖關教學敵人血量一律為 1，方便測試
+                this.hp = this.maxHp;
+                this.color = this.maxHp > 3 ? '#ef4444' : '#64748b'; 
+
+                if (state.mode === 'single' || state.mode === 'tutorial') {
+                    const edge = Math.floor(Math.random() * 4);
+                    if (edge === 0) { this.x = Math.random() * canvas.width; this.y = -50; }
+                    else if (edge === 1) { this.x = canvas.width + 50; this.y = Math.random() * canvas.height; }
+                    else if (edge === 2) { this.x = Math.random() * canvas.width; this.y = canvas.height + 50; }
+                    else { this.x = -50; this.y = Math.random() * canvas.height; }
+                    const angle = Math.atan2(canvas.height / 2 - this.y, canvas.width / 2 - this.x);
+                    let baseSpeed = 0.2 + Math.random() * 0.4 + (lvl * 0.03);
+                    this.vx = Math.cos(angle) * baseSpeed;
+                    this.vy = Math.sin(angle) * baseSpeed;
+                } else {
+                    let pCount = state.players ? state.players.length : 1;
+                    this.x = -50; 
+                    
+                    // 合作模式：精準分配數量，每 4 隻就有 1 隻 (絕對數量 25%) 會直接空降到其他玩家防區，其餘 3 隻 (絕對數量 75%) 從第一玩家開始
+                    if (pCount > 1 && (state.waveSpawned % 4 === 3)) {
+                        let spawnIndex = 1 + Math.floor(Math.random() * (pCount - 1));
+                        this.x = spawnIndex * canvas.width - 50;
+                    }
+                    
+                    this.y = 100 + Math.random() * (canvas.height - 200);
+                    // 速度基礎：隨波次與玩家人數雙重增加
+                    let baseSpeed = 0.3 + Math.random() * 0.3 + (lvl * 0.05) + (pCount * 0.08);
+                    this.vx = baseSpeed;
+                    this.vy = (Math.random() - 0.5) * baseSpeed * 0.8;
+                    this.currentZone = Math.floor(Math.max(0, this.x) / canvas.width);
+                }
+                
+                this.serverX = this.x; this.serverY = this.y;
+            }
+            update(dt) {
+                if (state.mode === 'single' || state.mode === 'tutorial' || state.isHost) {
+                    if (this.dotDmg > 0 && this.hp > 0) {
+                        this.dotTimer -= dt/1000;
+                        if (this.dotTimer <= 0) {
+                            this.takeDamage(this.dotDmg);
+                            createExplosion(this.x, this.y, '#f43f5e', 2);
+                            this.dotTimer = 0.5; this.dotDuration -= 0.5;
+                            if (this.dotDuration <= 0) this.dotDmg = 0;
+                        }
+                    }
+
+                    if (this.stunTime > 0) {
+                        this.stunTime -= dt/1000;
+                    } else {
+                        let slowFact = state.mode === 'coop' ? state.coopTotalSlow : state.passives.slow;
+                        let speedMult = 1 - (slowFact * 0.1);
+                        if (this.inAura) speedMult *= 0.4;
+                        
+                        this.x += this.vx * Math.max(0.2, speedMult); 
+                        this.y += this.vy * Math.max(0.2, speedMult);
+                        
+                        if (state.mode === 'coop') {
+                            if (this.y < 50) { this.y = 50; this.vy *= -1; }
+                            if (this.y > canvas.height - 50) { this.y = canvas.height - 50; this.vy *= -1; }
+                            
+                            // 判斷是否跨過邊界進入下一位玩家防區
+                            let newZone = Math.floor(this.x / canvas.width);
+                            if (newZone > this.currentZone && newZone < state.players.length) {
+                                this.currentZone = newZone;
+                                // 進入新地圖時，保留原高度，但重新計算更刁鑽的角度
+                                this.vy = (Math.random() - 0.5) * this.vx * 1.2;
+                            }
+                        }
+                    }
+                    this.serverX = this.x; this.serverY = this.y;
+                } else {
+                    this.x += (this.serverX - this.x) * 0.3;
+                    this.y += (this.serverY - this.y) * 0.3;
+                    if (this.stunTime > 0) this.stunTime -= dt/1000;
+                }
+            }
+            takeDamage(amt) {
+                if (Math.random() < state.passives.crit * 0.15) { amt *= 2; createExplosion(this.x, this.y, '#60a5fa', 5); }
+                
+                this.hp -= amt;
+                if (this.hp <= 0 && this.hp + amt > 0) {
+                    removeEnemyLocally(this); 
+                }
+                
+                if (state.mode === 'coop' && !state.isHost) {
+                    sendCoopAction('damage', { id: this.id, dmg: amt });
+                }
+            }
+            draw(ctx) {
+                ctx.save(); ctx.translate(this.x, this.y);
+                if (this.stunTime > 0) { ctx.shadowColor = '#8b5cf6'; ctx.shadowBlur = 10; ctx.translate(0, Math.sin(Date.now()/200)*3); }
+                else if (this.dotDmg > 0) { ctx.shadowColor = '#f43f5e'; ctx.shadowBlur = 5; }
+
+                ctx.beginPath();
+                ctx.moveTo(-this.width/2, -this.height/2); ctx.lineTo(this.width/2 - 8, -this.height/2);
+                ctx.lineTo(this.width/2, -this.height/2 + 8); ctx.lineTo(this.width/2, this.height/2);
+                ctx.lineTo(-this.width/2, this.height/2); ctx.closePath();
+                ctx.fillStyle = this.color; ctx.fill(); ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
+                
+                if (this.hp < this.maxHp || this.maxHp > 2) {
+                    ctx.fillStyle = '#000'; ctx.fillRect(-this.width/2, -this.height/2 - 10, this.width, 4);
+                    ctx.fillStyle = '#10b981'; ctx.fillRect(-this.width/2, -this.height/2 - 10, this.width * Math.max(0, (this.hp / this.maxHp)), 4);
+                }
+                ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '8px sans-serif'; 
+                ctx.fillText('FILE', 0, 0); ctx.restore();
+            }
+            contains(px, py) { return Math.abs(px - this.x) < this.width/2 && Math.abs(py - this.y) < this.height/2; }
+        }
+
+        // ==================== 共用渲染與邏輯 ====================
+        function drawBackground() {
+            ctx.strokeStyle = 'rgba(51, 65, 85, 0.4)'; ctx.lineWidth = 1;
+            const gridSize = 60;
+            const camX = getCameraX();
+            const startX = Math.floor(camX / gridSize) * gridSize;
+            for (let x = startX; x < camX + canvas.width; x += gridSize) {
+                ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+            }
+            for (let y = 0; y < canvas.height; y += gridSize) {
+                ctx.beginPath(); ctx.moveTo(camX, y); ctx.lineTo(camX + canvas.width, y); ctx.stroke();
+            }
+            
+            if (state.mode === 'coop') {
+                ctx.strokeStyle = 'rgba(250, 204, 21, 0.3)'; ctx.lineWidth = 4; ctx.setLineDash([15, 15]);
+                ctx.beginPath(); ctx.moveTo(camX, 0); ctx.lineTo(camX, canvas.height); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(camX + canvas.width, 0); ctx.lineTo(camX + canvas.width, canvas.height); ctx.stroke();
+                ctx.setLineDash([]);
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+                ctx.fillText(`ZONE ${state.playerIndex + 1}`, camX + canvas.width/2, 40);
+            }
+        }
+
+        function drawSingleTower(tx, ty, color, isLocal) {
+            if (isLocal && state.passives.aura > 0 && !state.placingTower) {
+                let r = 80 + (state.passives.aura * 40);
+                let ax = getCameraX() + canvas.width/2;
+                ctx.save(); ctx.beginPath(); ctx.arc(ax, ty, r, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+                ctx.translate(ax, ty); ctx.rotate(Date.now() / 1000); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+            }
+            
+            if (isLocal && state.shield && state.shield.life > 0 && !state.placingTower) {
+                ctx.save(); ctx.globalAlpha = Math.max(0, state.shield.life / state.shield.maxLife);
+                ctx.beginPath(); ctx.arc(tx, ty, state.shield.radius, 0, Math.PI * 2);
+                ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 4; ctx.shadowColor = '#818cf8'; ctx.shadowBlur = 15; ctx.stroke();
+                ctx.fillStyle = 'rgba(99, 102, 241, 0.15)'; ctx.fill(); ctx.restore();
+            }
+
+            ctx.save(); ctx.translate(tx, ty);
+            ctx.shadowColor = color; ctx.shadowBlur = 20 + Math.sin(Date.now() / 150) * 10;
+            ctx.fillStyle = '#1e293b'; ctx.strokeStyle = color; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.roundRect(-30, -40, 60, 80, 8); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#0f172a'; ctx.fillRect(-20, -20, 40, 30); ctx.strokeRect(-20, -20, 40, 30);
+            ctx.fillStyle = color; ctx.shadowBlur = 5;
+            const h = 8 + Math.sin(Date.now() / 100) * 8; ctx.fillRect(-12, 0 - h/2, 24, h);
+            ctx.restore();
+        }
+
+        function drawTower() {
+            if (state.mode === 'single' || state.mode === 'tutorial') {
+                drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
+            } else {
+                // Local Tower
+                if (!state.isDead && (state.placingTower ? state.towerPlaced : true)) {
+                    drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
+                }
+                
+                // Other Players' Towers
+                if (!state.placingTower) {
+                    state.players.forEach(uid => {
+                        if (uid !== userId) {
+                            let p = state.playersData[uid];
+                            if (p && p.hp > 0 && p.towerX !== undefined) {
+                                if (p.towerX > getCameraX() - 100 && p.towerX < getCameraX() + canvas.width + 100) {
+                                    drawSingleTower(p.towerX, p.towerY, '#10b981', false);
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        }
+        
+        function drawMinimap() {
+            if (state.mode !== 'coop') return;
+            mapCtx.clearRect(0, 0, 300, 30);
+            const pCount = state.players.length;
+            const w = 300 / pCount;
+            
+            for(let i=0; i<pCount; i++) {
+                mapCtx.fillStyle = i === state.playerIndex ? 'rgba(59, 130, 246, 0.3)' : 'rgba(30, 41, 59, 0.8)';
+                mapCtx.fillRect(i*w, 0, w, 30);
+                mapCtx.strokeStyle = '#475569'; mapCtx.strokeRect(i*w, 0, w, 30);
+            }
+            
+            const totalW = getGameWidth();
+            mapCtx.fillStyle = '#ef4444';
+            state.enemies.forEach(e => {
+                let mx = (e.x / totalW) * 300;
+                mapCtx.fillRect(mx - 2, 13, 4, 4);
+            });
+            
+            if (!state.placingTower || state.towerPlaced) {
+                state.players.forEach(uid => {
+                    let p = state.playersData[uid];
+                    let tx = -1;
+                    if (uid === userId && state.towerPlaced && !state.isDead) tx = state.towerX;
+                    else if (p && p.towerX !== undefined && p.hp > 0) tx = p.towerX;
+                    
+                    if (tx !== -1) {
+                        let mapTx = (tx / totalW) * 300;
+                        mapCtx.fillStyle = uid === userId ? '#3b82f6' : '#10b981';
+                        mapCtx.fillRect(mapTx - 3, 0, 6, 30);
+                    }
+                });
+                
+                // Draw Main Server
+                mapCtx.fillStyle = '#facc15';
+                mapCtx.fillRect(295, 0, 5, 30);
+            }
+        }
+
+        // ==================== 合作模式網路邏輯 ====================
+        function sendCoopAction(type, data) {
+            if (!isFirebaseReady || !state.roomId) return;
+            addDoc(collection(db, 'artifacts', appId, 'public', 'data', `room_${state.roomId}_actions`), {
+                type, data, timestamp: serverTimestamp()
+            }).catch(console.error);
+        }
+
+        async function processHostActions() {
+            if (!state.isHost) return;
+            const snaps = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `room_${state.roomId}_actions`));
+            snaps.forEach(docSnap => {
+                const action = docSnap.data();
+                if (action.type === 'damage') {
+                    let en = state.enemies.find(e => e.id === action.data.id);
+                    if (en) en.takeDamage(action.data.dmg);
+                } else if (action.type === 'sleep') {
+                    state.enemies.forEach(e => {
+                        if (e.x >= action.data.minX - 100 && e.x <= action.data.maxX + 100) {
+                            e.stunTime = Math.max(e.stunTime, action.data.duration);
+                            e.takeDamage(Math.max(1, e.maxHp * 0.5));
+                        }
+                    });
+                } else if (action.type === 'refresh') {
+                    state.enemies.forEach(e => {
+                        e.x = Math.max(0, e.x - action.data.push); e.takeDamage(action.data.dmg);
+                        if (action.data.stun > 0) e.stunTime = Math.max(e.stunTime, action.data.stun);
+                    });
+                } else if (action.type === 'bomb' || action.type === 'scroll') {
+                    state.enemies.forEach(en => {
+                        if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
+                            en.takeDamage(action.data.dmg);
+                            if (action.data.push > 0) {
+                                let angle = Math.atan2(en.y - action.data.y, en.x - action.data.x);
+                                en.x += Math.cos(angle) * action.data.push; en.y += Math.sin(angle) * action.data.push;
+                            }
+                        }
+                    });
+                } else if (action.type === 'enter') {
+                    state.enemies.forEach(en => {
+                        if (distPointToSegment(en.x, en.y, action.data.tx, action.data.ty, action.data.mx, action.data.my) < action.data.w + (en.width || 35)/2) {
+                            en.takeDamage(action.data.dmg);
+                            if (action.data.stun > 0) en.stunTime = Math.max(en.stunTime, action.data.stun);
+                        }
+                    });
+                } else if (action.type === 'aoe_stun') {
+                    state.enemies.forEach(en => {
+                        if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
+                            en.stunTime = Math.max(en.stunTime, action.data.stun);
+                        }
+                    });
+                } else if (action.type === 'heal_tower') {
+                    let uid = action.data.uid;
+                    if (state.playersHp && state.playersHp[uid] !== undefined && state.playersHp[uid] > 0) {
+                        state.playersHp[uid] = Math.min(3, state.playersHp[uid] + action.data.amt);
+                    }
+                }
+                deleteDoc(docSnap.ref); 
+            });
+        }
+
+        async function hostSyncLoop() {
+            if (!state.isPlaying || !state.isHost) return;
+            const serialized = JSON.stringify(state.enemies.map(e => [e.id, Math.round(e.x), Math.round(e.y), Math.round(e.hp), e.maxHp, e.stunTime > 0 ? 1 : 0]));
+            await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
+                enemiesStr: serialized,
+                mainHp: state.mainHp,
+                playersHp: state.playersHp,
+                wave: state.wave,
+                status: (state.waveSpawned >= state.waveTotal && state.enemies.length === 0 && !state.placingTower) ? 'upgrading' : (state.placingTower ? 'placing' : 'playing')
+            });
+            setTimeout(hostSyncLoop, 150);
+        }
+
+        // ==================== 遊戲狀態控制 ====================
+        function updateUI() {
+            if (state.mode === 'coop') {
+                document.getElementById('modeTitle').innerText = `合作防線 (共 ${state.players.length} 區)`;
+                document.getElementById('scoreDisplay').innerHTML = `${state.score} <span class="text-xs text-slate-300 ml-2">主機: </span><span class="text-red-400 font-bold">${state.mainHp}</span>/20`;
+                document.getElementById('expContainer').classList.add('hidden');
+                document.getElementById('minimapContainer').classList.remove('hidden');
+            } else if (state.mode === 'tutorial') {
+                document.getElementById('modeTitle').innerText = '武器闖關教學';
+                document.getElementById('scoreDisplay').innerText = state.score;
+                document.getElementById('expContainer').classList.remove('hidden');
+                document.getElementById('minimapContainer').classList.add('hidden');
+                document.getElementById('expBar').style.width = Math.min(100, (state.tutorialKills / state.tutorialGoal) * 100) + '%';
+            } else {
+                document.getElementById('modeTitle').innerText = '單人防禦特訓';
+                document.getElementById('scoreDisplay').innerText = state.score;
+                document.getElementById('expContainer').classList.remove('hidden');
+                document.getElementById('minimapContainer').classList.add('hidden');
+                document.getElementById('expBar').style.width = Math.min(100, (state.exp / state.expNeeded) * 100) + '%';
+            }
+            
+            if (state.mode === 'tutorial') {
+                document.getElementById('levelLabel').innerHTML = `教學關卡: <span class="font-bold text-yellow-400">${state.tutorialStage + 1} / ${TUTORIAL_WEAPONS.length}</span>`;
+                let currentWId = TUTORIAL_WEAPONS[state.tutorialStage];
+                if (currentWId && WEAPONS[currentWId]) {
+                    document.getElementById('weaponTip').innerText = `[教學目標：擊殺 ${state.tutorialGoal} 隻] ${WEAPONS[currentWId].name}：${WEAPONS[currentWId].tip}`;
+                }
+            } else {
+                document.getElementById('levelLabel').innerHTML = (state.mode === 'coop' ? '波次 ' : '等級 ') + `<span id="levelDisplay" class="font-bold text-white">${state.mode === 'coop' ? state.wave : state.level}</span>`;
+            }
+            
+            const tray = document.getElementById('weaponListTray');
+            tray.innerHTML = '';
+            
+            state.unlockedWeapons.forEach(wId => {
+                const w = WEAPONS[wId];
+                if (!w) return;
+                const btn = document.createElement('div');
+                btn.className = 'relative px-2 py-1 rounded text-xs font-bold border cursor-help hover:scale-110 overflow-hidden';
+                btn.style.backgroundColor = w.color + '40'; btn.style.borderColor = w.color; btn.style.color = w.color;
+                
+                const cdOverlay = document.createElement('div');
+                cdOverlay.id = 'cd-overlay-' + wId;
+                cdOverlay.className = 'absolute bottom-0 left-0 w-full bg-black/60 z-0 pointer-events-none transition-none';
+                cdOverlay.style.height = '0%';
+                
+                const textSpan = document.createElement('span');
+                textSpan.className = 'relative z-10';
+                textSpan.innerText = w.short;
+                
+                btn.appendChild(cdOverlay);
+                btn.appendChild(textSpan);
+                
+                btn.onmouseenter = () => { document.getElementById('weaponTip').innerText = `[武裝] ${w.name}：${w.tip}`; };
+                tray.appendChild(btn);
+            });
+            Object.keys(PASSIVES).forEach(pId => {
+                if (state.passives[pId] > 0) {
+                    const p = PASSIVES[pId];
+                    const btn = document.createElement('div');
+                    btn.className = 'px-2 py-1 rounded-full text-xs font-bold border cursor-help hover:scale-110';
+                    btn.style.backgroundColor = p.color + '30'; btn.style.borderColor = p.color; btn.style.color = p.color;
+                    btn.innerText = `${p.short} Lv.${state.passives[pId]}`;
+                    btn.onmouseenter = () => { document.getElementById('weaponTip').innerText = `[被動] ${p.name}：${p.desc}`; };
+                    tray.appendChild(btn);
+                }
+            });
+            
+            const hpContainer = document.getElementById('hpContainer');
+            hpContainer.innerHTML = '';
+            for (let i = 1; i <= state.maxHp; i++) {
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('class', `heart w-6 h-6 md:w-8 md:h-8 text-red-500 fill-current ${i > state.hp ? 'lost' : ''}`);
+                svg.innerHTML = `<path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>`;
+                hpContainer.appendChild(svg);
+            }
+        }
+
+        function createExplosion(x, y, color, count=20) {
+            for (let i = 0; i < count; i++) state.particles.push(new Particle(x, y, color));
+        }
+        
+        function distPointToSegment(px, py, x1, y1, x2, y2) {
+            let l2 = (x2-x1)*(x2-x1) + (y2-y1)*(y2-y1);
+            if (l2 === 0) return Math.hypot(px-x1, py-y1);
+            let t = ((px-x1)*(x2-x1) + (py-y1)*(y2-y1)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            return Math.hypot(px - (x1 + t*(x2-x1)), py - (y1 + t*(y2-y1)));
+        }
+
+        function removeEnemyLocally(enemy) {
+            const index = state.enemies.indexOf(enemy);
+            if (index > -1) {
+                createExplosion(enemy.x, enemy.y, enemy.color); playSound('destroy');
+                state.score += 10;
+                
+                if (state.mode === 'tutorial') {
+                    state.tutorialKills++;
+                    if (state.tutorialKills >= state.tutorialGoal) {
+                        state.tutorialStage++;
+                        if (state.tutorialStage >= TUTORIAL_WEAPONS.length) {
+                            showCertificate();
+                        } else {
+                            state.tutorialKills = 0;
+                            showTutorialBriefing();
+                        }
+                    }
+                } else if (state.mode === 'single') {
+                    state.exp += 10;
+                    if (state.exp >= state.expNeeded) {
+                        state.exp -= state.expNeeded; state.level++; state.expNeeded = Math.floor(state.expNeeded * 1.5);
+                        triggerLevelUp();
+                    }
+                }
+                updateUI();
+                state.enemies.splice(index, 1);
+            }
+        }
+
+        function damageTowerSingle() {
+            let dodgeChance = state.passives.dodge * 0.1;
+            if (Math.random() < dodgeChance) {
+                playSound('levelup'); 
+                createExplosion(state.towerX, state.towerY, '#34d399', 30);
+                return; 
+            }
+            
+            state.hp--; playSound('hurt');
+            document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 300);
+            
+            if (state.passives.thorns > 0) {
+                state.enemies.forEach(e => e.takeDamage(state.passives.thorns * 20));
+                createExplosion(state.towerX, state.towerY, '#f43f5e', 30);
+            }
+            
+            updateUI();
+            if (state.hp <= 0) gameOver();
+        }
+
+        // ==================== 主迴圈 ====================
+        let lastTime = 0;
+        function updateCooldowns(now) {
+            if (state.mode === 'coop' && state.placingTower) return;
+            
+            const checkCD = (wId, lastWeaponTime, cdTime) => {
+                const overlay = document.getElementById('cd-overlay-' + wId);
+                if (overlay) {
+                    if (lastWeaponTime === 0) {
+                        overlay.style.height = '0%';
+                    } else {
+                        let elapsed = now - lastWeaponTime;
+                        if (elapsed >= cdTime) {
+                            overlay.style.height = '0%';
+                        } else {
+                            let percent = Math.max(0, 100 - (elapsed / cdTime) * 100);
+                            overlay.style.height = percent + '%';
+                        }
+                    }
+                }
+            };
+
+            if (state.unlockedWeapons.includes('space')) checkCD('space', state.lastSpaceTime, getCD(60000 - getWeaponUpgLevel('space','space_cd')*5000));
+            if (state.unlockedWeapons.includes('at')) checkCD('at', state.lastAtTime, getCD(15000));
+            if (state.unlockedWeapons.includes('del')) checkCD('del', state.lastDelTime, getCD(8000 - getWeaponUpgLevel('del','del_cd')*1000));
+            if (state.unlockedWeapons.includes('enter')) checkCD('enter', state.lastEnterTime, getCD(18000));
+            if (state.unlockedWeapons.includes('ctrlx')) checkCD('ctrlx', state.lastCtrlXTime, getCD(10000));
+            if (state.unlockedWeapons.includes('ctrlc')) checkCD('ctrlc', state.lastCtrlCTime, getCD(60000));
+            if (state.unlockedWeapons.includes('ctrlv')) checkCD('ctrlv', state.lastCtrlVTime, getCD(8000));
+            if (state.unlockedWeapons.includes('scroll')) checkCD('scroll', state.lastScrollTime, getCD(1000));
+            if (state.unlockedWeapons.includes('bounce')) checkCD('bounce', state.lastBounceTime, getCD(3000 - getWeaponUpgLevel('bounce','bounce_cd')*500));
+            if (state.unlockedWeapons.includes('select')) checkCD('select', state.lastSelectTime, getCD(10000));
+        }
+
+        function gameLoop(timestamp) {
+            if (!state.isPlaying) return;
+            const dt = timestamp - lastTime; lastTime = timestamp;
+
+            if (state.placingTower) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.save(); ctx.translate(-getCameraX(), 0);
+                drawBackground();
+                
+                // 畫出幽靈預覽
+                if (!state.towerPlaced) {
+                    ctx.globalAlpha = 0.6;
+                    drawSingleTower(state.mouseX, state.mouseY, '#3b82f6', true);
+                    ctx.globalAlpha = 1.0;
+                } else {
+                    drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
+                }
+                
+                // 畫出隊友已放置的塔
+                state.players.forEach(uid => {
+                    if (uid !== userId) {
+                        let p = state.playersData[uid];
+                        if (p && p.towerX !== undefined) {
+                            if (p.towerX > getCameraX() - 100 && p.towerX < getCameraX() + canvas.width + 100) {
+                                drawSingleTower(p.towerX, p.towerY, '#10b981', false);
+                            }
+                        }
+                    }
+                });
+                
+                ctx.restore();
+                if (state.mode === 'coop') drawMinimap();
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            if (!state.isPaused) {
+                state.timeElapsed += dt;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.save();
+                ctx.translate(-getCameraX(), 0);
+
+                drawBackground();
+
+                // === 實體生成與管理 (單人、闖關 或 Host 處理) ===
+                if (state.mode === 'single' || state.mode === 'tutorial' || state.isHost) {
+                    if (state.mode === 'single' || state.mode === 'tutorial') {
+                        let lvl = state.mode === 'tutorial' ? (state.tutorialStage + 1) : state.level;
+                        let currentSpawnRate = Math.max(400, 3000 - (lvl * 150) - (state.timeElapsed / 100));
+                        if (state.mode === 'tutorial') currentSpawnRate = 1000; // 教學模式固定快速出怪避免乾等
+                        if (timestamp - state.lastSpawnTime > currentSpawnRate) { state.enemies.push(new Enemy()); state.lastSpawnTime = timestamp; }
+                    } else {
+                        if (state.waveSpawned < state.waveTotal) {
+                            let pCount = state.players ? state.players.length : 1;
+                            // 根據玩家人數與波次大幅加快出怪頻率
+                            let rate = Math.max(100, 1500 - (state.wave * 250) - (pCount * 250));
+                            if (timestamp - state.lastSpawnTime > rate) {
+                                state.enemies.push(new Enemy());
+                                state.waveSpawned++; state.lastSpawnTime = timestamp;
+                            }
+                        }
+                    }
+                    
+                    let autoCD = 4000 - state.passives.autoclick * 500;
+                    if (state.passives.autoclick > 0 && timestamp - state.lastAutoclickTime > autoCD && !state.isDead) {
+                        state.lastAutoclickTime = timestamp;
+                        let inScreen = state.enemies.filter(e => e.x > getCameraX() && e.x < getCameraX() + canvas.width);
+                        if (inScreen.length > 0) {
+                            let target = inScreen[Math.floor(Math.random() * inScreen.length)];
+                            let dmg = 5 + state.passives.autoclick * 5;
+                            if (state.mode === 'coop' && !state.isHost) {
+                                sendCoopAction('damage', {id: target.id, dmg});
+                                createExplosion(target.x, target.y, '#2dd4bf', 5);
+                            } else {
+                                target.takeDamage(dmg);
+                                ctx.beginPath(); ctx.moveTo(state.towerX, state.towerY); ctx.lineTo(target.x, target.y); ctx.strokeStyle = '#2dd4bf'; ctx.lineWidth = 2; ctx.stroke();
+                                playSound('type');
+                            }
+                        }
+                    }
+                    
+                    if (state.passives.cloud > 0 && timestamp - state.lastCloudTime > 60000 && !state.isDead) {
+                        state.lastCloudTime = timestamp;
+                        if (state.hp < state.maxHp) { 
+                            if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt: 1});
+                            else { state.hp++; updateUI(); }
+                        }
+                    }
+                }
+
+                // === 玩家技能處理 ===
+                if (state.shield) { state.shield.update(dt); if (state.shield.life <= 0) state.shield = null; }
+                
+                if (!state.isDead && state.unlockedWeapons.includes('typing')) {
+                    if (state.mode === 'tutorial') {
+                        // 闖關教學模式：固定在塔周圍 8 個方位產生爆彈，隨時保持 8 顆
+                        let offsets = [
+                            {dx: 0, dy: -150}, {dx: 0, dy: 150}, {dx: -150, dy: 0}, {dx: 150, dy: 0},
+                            {dx: -110, dy: -110}, {dx: 110, dy: -110}, {dx: -110, dy: 110}, {dx: 110, dy: 110}
+                        ];
+                        if (state.mapBombs.length < 8) {
+                            let currentIndices = state.mapBombs.map(mb => mb.tutIndex);
+                            for (let i = 0; i < 8; i++) {
+                                if (!currentIndices.includes(i)) {
+                                    let mb = new MapBomb(getCameraX(), state.towerX + offsets[i].dx, state.towerY + offsets[i].dy);
+                                    mb.tutIndex = i;
+                                    state.mapBombs.push(mb);
+                                }
+                            }
+                        }
+                    } else {
+                        // 單人與合作模式：維持原本的隨機產生且最多 3 顆
+                        if (timestamp - state.lastBombSpawnTime > 5000 && state.mapBombs.length < 3) {
+                            state.mapBombs.push(new MapBomb(getCameraX())); state.lastBombSpawnTime = timestamp;
+                        }
+                    }
+                }
+
+                // 機槍射擊
+                if (!state.isDead && state.isLeftMouseDown && state.unlockedWeapons.includes('machinegun') && timestamp - state.lastMgShot > (150 - getWeaponUpgLevel('machinegun','mg_speed')*25)) {
+                    let scatter = getWeaponUpgLevel('machinegun','mg_scatter') > 0 ? 3 : 1;
+                    for (let s=0; s<scatter; s++) {
+                        let offset = (s - Math.floor(scatter/2)) * 30;
+                        state.bullets.push(new Bullet(state.towerX, state.towerY, state.mouseX + offset, state.mouseY + offset, 15, 2, getWeaponUpgLevel('machinegun','mg_pierce')));
+                    }
+                    state.lastMgShot = timestamp; playSound('shoot');
+                }
+
+                // 更新實體
+                for (let i = state.mapBombs.length - 1; i >= 0; i--) { let mb = state.mapBombs[i]; if (!mb) continue; mb.update(dt); mb.draw(ctx); }
+                for (let i = state.particles.length - 1; i >= 0; i--) { let p = state.particles[i]; if (!p) continue; p.update(dt); p.draw(ctx); if (p.life <= 0) state.particles.splice(i, 1); }
+                for (let i = state.rings.length - 1; i >= 0; i--) { let r = state.rings[i]; if (!r) continue; r.update(dt); r.draw(ctx); if (r.life <= 0) state.rings.splice(i, 1); }
+                for (let i = state.walls.length - 1; i >= 0; i--) { let w = state.walls[i]; if (!w) continue; w.update(dt); w.draw(ctx); if (w.life <= 0) state.walls.splice(i, 1); }
+                for (let i = state.vweapons.length - 1; i >= 0; i--) { let vw = state.vweapons[i]; if (!vw) continue; vw.update(dt); vw.draw(ctx); if (vw.size <= 0) state.vweapons.splice(i, 1); }
+                for (let i = state.beams.length - 1; i >= 0; i--) { let b = state.beams[i]; if (!b) continue; b.update(dt); b.draw(ctx); if (b.life <= 0) state.beams.splice(i, 1); }
+                for (let i = state.grenades.length - 1; i >= 0; i--) { let g = state.grenades[i]; if (!g) continue; g.update(dt); g.draw(ctx); if (g.life <= 0) state.grenades.splice(i, 1); }
+
+                // 畫炸彈拖曳線
+                if (!state.isDead && state.isDragging && state.unlockedWeapons.includes('bomb')) {
+                    ctx.beginPath(); ctx.moveTo(state.dragStartX, state.dragStartY); ctx.lineTo(state.mouseX, state.mouseY);
+                    ctx.strokeStyle = '#f97316'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]); ctx.stroke(); ctx.setLineDash([]);
+                }
+
+                let towerR = 30;
+                let auraX = getCameraX() + canvas.width/2;
+                let auraR = state.passives.aura > 0 ? 80 + state.passives.aura * 40 : 0;
+
+                // 更新反射彈
+                for (let i = state.bounceBullets.length - 1; i >= 0; i--) {
+                    let bb = state.bounceBullets[i];
+                    if (!bb) continue;
+                    bb.update(dt, getGameWidth(), canvas.height);
+                    bb.draw(ctx);
+                    if (bb.life <= 0) { state.bounceBullets.splice(i, 1); continue; }
+                    for (let en of state.enemies) {
+                        if (en.contains(bb.x, bb.y)) {
+                            let lastHit = bb.hitIds.get(en.id) || 0;
+                            // 設定 0.5 秒 (500ms) 的命中冷卻，避免卡在敵人體內連續傷害
+                            if (state.timeElapsed - lastHit > 500) {
+                                en.takeDamage(bb.dmg);
+                                bb.hitIds.set(en.id, state.timeElapsed);
+                                createExplosion(bb.x, bb.y, '#06b6d4', 5);
+                            }
+                        }
+                    }
+                }
+
+                // 更新子彈與碰撞
+                for (let i = state.bullets.length - 1; i >= 0; i--) {
+                    let b = state.bullets[i]; 
+                    if (!b) continue;
+                    b.update(dt); b.draw(ctx);
+                    if (b.life <= 0) { state.bullets.splice(i, 1); continue; }
+                    let hit = false;
+                    for (let en of state.enemies) {
+                        if (!b.hitIds.has(en.id) && en.contains(b.x, b.y)) {
+                            en.takeDamage(b.dmg); b.hitIds.add(en.id);
+                            if (b.hitIds.size > b.pierce) { hit = true; break; }
+                        }
+                    }
+                    if (hit) state.bullets.splice(i, 1);
+                }
+
+                // 敵人更新與各種碰撞
+                for (let i = state.enemies.length - 1; i >= 0; i--) {
+                    let enemy = state.enemies[i];
+                    if (!enemy) continue;
+                    enemy.inAura = (auraR > 0 && Math.hypot(enemy.x - auraX, enemy.y - canvas.height/2) < auraR);
+                    enemy.update(dt);
+                    
+                    if (state.mode === 'single' || state.mode === 'tutorial') {
+                        let distToTower = Math.hypot(enemy.x - state.towerX, enemy.y - state.towerY);
+                        if (distToTower < towerR + enemy.width/2) {
+                            state.enemies.splice(i, 1); damageTowerSingle(); continue;
+                        }
+                    } else if (state.mode === 'coop' && state.isHost) {
+                        // 撞擊最終主機
+                        let mainX = state.players.length * canvas.width;
+                        if (enemy.x > mainX) {
+                            state.enemies.splice(i, 1);
+                            state.mainHp--;
+                            if (state.mainHp <= 0) gameOver();
+                            continue;
+                        }
+                        
+                        // 撞擊個人防禦塔
+                        let hitTower = false;
+                        Object.keys(state.playersHp).forEach(uid => {
+                            if (state.playersHp[uid] > 0) {
+                                let p = state.playersData[uid];
+                                if (p && p.towerX !== undefined) {
+                                    if (Math.hypot(enemy.x - p.towerX, enemy.y - p.towerY) < towerR + enemy.width/2) {
+                                        hitTower = true;
+                                        let dodge = (p.passives && p.passives.dodge) ? p.passives.dodge * 0.1 : 0;
+                                        if (Math.random() >= dodge) {
+                                            state.playersHp[uid]--;
+                                            if (p.passives && p.passives.thorns) {
+                                                let dmg = p.passives.thorns * 20;
+                                                state.enemies.forEach(e => e.takeDamage(dmg));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                        if (hitTower) {
+                            state.enemies.splice(i, 1);
+                            continue;
+                        }
+                    }
+                    
+                    // 護盾碰撞
+                    if (!state.isDead && state.shield && state.shield.life > 0) {
+                        if (Math.hypot(enemy.x - state.towerX, enemy.y - state.towerY) < state.shield.radius + enemy.width/2) {
+                            if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: enemy.id, dmg: 999999});
+                            else enemy.takeDamage(999999);
+                        }
+                    }
+
+                    // 雷射牆碰撞
+                    state.walls.forEach(w => {
+                        if (!w.hitIds.has(enemy.id) && distPointToSegment(enemy.x, enemy.y, w.x1, w.y1, w.x2, w.y2) < 20) {
+                            enemy.takeDamage(w.dmg); if (w.stun > 0) enemy.stunTime = w.stun;
+                            enemy.vx *= -1; w.hitIds.add(enemy.id); // 反彈
+                        }
+                    });
+
+                    // V字斬碰撞 (修正為精準的V字線段判定)
+                    state.vweapons.forEach(vw => {
+                        if (!vw.hitIds.has(enemy.id)) {
+                            let dist1 = distPointToSegment(enemy.x, enemy.y, vw.x - vw.size/2, vw.y - vw.size, vw.x, vw.y);
+                            let dist2 = distPointToSegment(enemy.x, enemy.y, vw.x, vw.y, vw.x + vw.size/2, vw.y - vw.size);
+                            let hitThickness = 20; 
+                            if (dist1 < hitThickness + enemy.width/2 || dist2 < hitThickness + enemy.width/2) {
+                                enemy.takeDamage(vw.dmg); if (vw.stun) enemy.stunTime = 1;
+                                vw.hitIds.add(enemy.id);
+                            }
+                        }
+                    });
+                    
+                    if (enemy.x > getCameraX() - 100 && enemy.x < getCameraX() + canvas.width + 100) {
+                        enemy.draw(ctx);
+                    }
+                }
+
+                drawTower();
+                
+                // 畫出合作模式最終主機
+                if (state.mode === 'coop') {
+                    let mainX = state.players.length * canvas.width;
+                    if (getCameraX() + canvas.width >= mainX - 100) {
+                        ctx.save();
+                        ctx.translate(mainX, canvas.height / 2);
+                        
+                        // 大幅擴大主機的視覺範圍，覆蓋整個右側邊緣，並對齊撞擊判定線
+                        ctx.fillStyle = '#0f172a'; 
+                        ctx.fillRect(0, -canvas.height / 2, 60, canvas.height);
+                        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 4; 
+                        ctx.strokeRect(0, -canvas.height / 2, 60, canvas.height);
+                        
+                        ctx.fillStyle = '#facc15'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
+                        ctx.fillText('MAIN SERVER', 30, -canvas.height / 2 + 40);
+                        
+                        // 主機血量條
+                        let hpBarHeight = canvas.height - 120;
+                        ctx.fillStyle = '#ef4444'; 
+                        ctx.fillRect(15, -hpBarHeight / 2, 30, hpBarHeight);
+                        ctx.fillStyle = '#10b981';
+                        let hpRatio = Math.max(0, state.mainHp / 20);
+                        ctx.fillRect(15, hpBarHeight / 2 - (hpBarHeight * hpRatio), 30, hpBarHeight * hpRatio);
+                        
+                        ctx.restore();
+                    }
+                }
+
+                ctx.restore(); 
+                
+                if (state.mode === 'coop') drawMinimap();
+                if (state.mode === 'coop' && state.isHost) processHostActions();
+
+                updateCooldowns(performance.now());
+
+            } else {
+                ctx.save(); ctx.translate(-getCameraX(), 0);
+                drawBackground();
+                state.mapBombs.forEach(mb => mb.draw(ctx));
+                state.particles.forEach(p => p.draw(ctx));
+                state.rings.forEach(r => r.draw(ctx));
+                state.enemies.forEach(e => { if (e.x > getCameraX() - 100 && e.x < getCameraX() + canvas.width + 100) e.draw(ctx); });
+                drawTower();
+                ctx.restore();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // ==================== 升級與 UI 控制 ====================
+        function triggerLevelUp(isConsecutive = false) {
+            // 單人模式1次，合作模式第二回合開始2次
+            if (!isConsecutive) {
+                state.inUpgradeSession = true;
+                if (state.mode === 'coop') {
+                    state.upgradesPending = (state.wave === 1) ? 1 : 2;
+                } else {
+                    state.upgradesPending = 1;
+                }
+            }
+            
+            state.isPaused = true; playSound('levelup');
+            state.isDragging = false; state.isLeftMouseDown = false; state.ctrlVActive = false; hiddenInput.blur();
+            
+            const optionsContainer = document.getElementById('upgradeOptions');
+            optionsContainer.innerHTML = '';
+            
+            if (state.mode === 'coop') {
+                document.getElementById('upgradeTitle').innerText = `Wave ${state.wave} 抵禦成功！選擇強化 (剩餘 ${state.upgradesPending} 次)`;
+            } else {
+                document.getElementById('upgradeTitle').innerText = '系統升級！選擇一項強化';
+            }
+            
+            document.getElementById('upgradeWaitText').innerText = '';
+            
+            let pool = [];
+            Object.keys(WEAPONS).forEach(key => {
+                if (!state.unlockedWeapons.includes(key)) pool.push({ type: 'unlock', id: key, title: `解鎖: ${WEAPONS[key].name}`, desc: WEAPONS[key].tip, color: WEAPONS[key].color });
+            });
+            state.unlockedWeapons.forEach(wId => {
+                WEAPONS[wId].upgrades.forEach(upg => {
+                    let lvl = getWeaponUpgLevel(wId, upg.id);
+                    if (lvl < upg.max) pool.push({ type: 'upgrade', wId: wId, uId: upg.id, title: `【${WEAPONS[wId].short}】${upg.name}${upg.max>1?`(Lv.${lvl+1})`:''}`, desc: upg.desc, color: WEAPONS[wId].color });
+                });
+            });
+            Object.keys(PASSIVES).forEach(key => {
+                if (state.passives[key] < PASSIVES[key].max) pool.push({ type: 'passive', id: key, title: `被動: ${PASSIVES[key].name} (Lv.${state.passives[key]+1})`, desc: PASSIVES[key].desc, color: PASSIVES[key].color });
+            });
+            pool.push({ type: 'heal', title: '系統修復', desc: '立即恢復 2 點血量', color: '#10b981' });
+            
+            pool = pool.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+            pool.forEach(opt => {
+                const card = document.createElement('div');
+                card.className = 'upgrade-card bg-slate-800 p-6 rounded-2xl border-2 border-slate-600 cursor-pointer flex flex-col items-center text-center transition-all w-full';
+                card.style.borderTopColor = opt.color;
+                card.innerHTML = `<h3 class="text-xl font-bold mb-2" style="color:${opt.color}">${opt.title}</h3><p class="text-slate-300 text-sm">${opt.desc}</p>`;
+                card.onclick = () => {
+                    const btn = document.getElementById('btnReroll');
+                    if (btn) btn.classList.add('hidden');
+
+                    if (opt.type === 'unlock') state.unlockedWeapons.push(opt.id);
+                    else if (opt.type === 'upgrade') state.weaponUpgrades[opt.wId].push(opt.uId);
+                    else if (opt.type === 'passive') {
+                        state.passives[opt.id]++;
+                        if (opt.id === 'reroll') state.rerolls += 3;
+                    }
+                    else if (opt.type === 'heal') {
+                        if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt: 2});
+                        else state.hp = Math.min(state.maxHp, state.hp + 2);
+                    }
+                    
+                    state.upgradesPending--;
+                    updateUI();
+                    
+                    if (state.upgradesPending > 0) {
+                        triggerLevelUp(true); // 如果還有剩餘次數，保持會話連續
+                        return;
+                    }
+                    
+                    state.inUpgradeSession = false;
+                    
+                    if (state.mode === 'single') {
+                        document.getElementById('upgradeModal').classList.add('hidden');
+                        state.isPaused = false; lastTime = performance.now();
+                    } else {
+                        card.parentNode.innerHTML = '';
+                        document.getElementById('upgradeWaitText').innerText = '等待其他玩家選擇...';
+                        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { [`players.${userId}.ready`]: true, [`players.${userId}.passives`]: state.passives });
+                    }
+                };
+                optionsContainer.appendChild(card);
+            });
+            
+            let btnReroll = document.getElementById('btnReroll');
+            btnReroll.classList.remove('hidden');
+            btnReroll.innerText = `重新洗牌 (剩餘 ${state.rerolls} 次)`;
+            if (state.rerolls > 0) {
+                btnReroll.className = 'bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 text-lg mt-6';
+                btnReroll.onclick = () => {
+                    state.rerolls--;
+                    playSound('wave');
+                    triggerLevelUp(true); // 洗牌不消耗升級次數
+                };
+            } else {
+                btnReroll.className = 'bg-slate-600 text-slate-400 font-bold py-3 px-8 rounded-full shadow-lg text-lg mt-6 cursor-not-allowed';
+                btnReroll.onclick = null;
+            }
+            
+            document.getElementById('upgradeModal').classList.remove('hidden');
+        }
+
+        function gameOver() {
+            state.isPlaying = false;
+            document.getElementById('finalScore').innerText = state.score;
+            
+            let finalProgress = state.level;
+            if (state.mode === 'coop') finalProgress = state.wave;
+            else if (state.mode === 'tutorial') finalProgress = state.tutorialStage + 1;
+            document.getElementById('finalLevel').innerText = finalProgress;
+            
+            document.getElementById('gameOverModal').classList.remove('hidden');
+            
+            if (isFirebaseReady && (state.mode === 'single' || (state.mode === 'coop' && state.isHost))) {
+                document.getElementById('scoreSubmitDiv').classList.remove('hidden');
+                document.getElementById('restartBtn').className = 'bg-slate-600 hover:bg-slate-500 text-white font-bold py-2 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-sm mt-2';
+                document.getElementById('restartBtn').innerText = '放棄上傳並返回';
+            } else {
+                document.getElementById('scoreSubmitDiv').classList.add('hidden');
+                document.getElementById('restartBtn').className = 'bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg';
+                document.getElementById('restartBtn').innerText = '返回主選單';
+            }
+
+            if (state.mode === 'coop' && state.isHost) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { status: 'gameover' });
+            }
+        }
+
+        async function fetchLeaderboards() {
+            if (!isFirebaseReady) return alert('Firebase 連線異常，無法獲取排行榜');
+            document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('leaderboardModal').classList.remove('hidden');
+            document.getElementById('lbSingle').innerHTML = '載入中...';
+            document.getElementById('lbCoop').innerHTML = '載入中...';
+            
+            try {
+                const [snapSingle, snapCoop] = await Promise.all([
+                    getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard_single')),
+                    getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard_coop'))
+                ]);
+                
+                let singleData = []; snapSingle.forEach(d => singleData.push(d.data()));
+                let coopData = []; snapCoop.forEach(d => coopData.push(d.data()));
+                
+                singleData.sort((a, b) => b.score - a.score);
+                coopData.sort((a, b) => b.score - a.score);
+                
+                let htmlSingle = singleData.slice(0, 10).map((d, i) => `<tr class="border-b border-slate-700/50"><td class="py-2">${i+1}</td><td>${d.name||'未知'}</td><td>Lv.${d.level||1}</td><td class="text-yellow-400 font-bold">${d.score}</td></tr>`).join('');
+                document.getElementById('lbSingle').innerHTML = `<table class="w-full text-center border-collapse"><thead><tr class="border-b border-slate-600 text-blue-400"><th class="pb-2">名次</th><th>玩家</th><th>等級</th><th>分數</th></tr></thead><tbody>${htmlSingle||'<tr><td colspan="4" class="py-4">尚無紀錄</td></tr>'}</tbody></table>`;
+                
+                let htmlCoop = coopData.slice(0, 10).map((d, i) => `<tr class="border-b border-slate-700/50"><td class="py-2">${i+1}</td><td>${d.hostName||'未知'}</td><td>W.${d.wave||1} (${d.players||1}人)</td><td class="text-yellow-400 font-bold">${d.score}</td></tr>`).join('');
+                document.getElementById('lbCoop').innerHTML = `<table class="w-full text-center border-collapse"><thead><tr class="border-b border-slate-600 text-purple-400"><th class="pb-2">名次</th><th>房主</th><th>波次(人數)</th><th>分數</th></tr></thead><tbody>${htmlCoop||'<tr><td colspan="4" class="py-4">尚無紀錄</td></tr>'}</tbody></table>`;
+            } catch (err) {
+                console.error(err);
+                document.getElementById('lbSingle').innerHTML = '讀取失敗';
+                document.getElementById('lbCoop').innerHTML = '讀取失敗';
+            }
+        }
+
+        // ==================== 房間連線邏輯 ====================
+        async function hostRoom() {
+            state.mode = 'coop'; state.isHost = true;
+            state.roomId = Math.random().toString(36).substr(2, 5).toUpperCase();
+            
+            await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
+                hostId: userId, status: 'waiting', wave: 1, mainHp: 20,
+                players: { [userId]: { name: '指揮官 (房主)', ready: false, passives: state.passives } },
+                enemiesStr: "[]"
+            });
+            enterLobby();
+        }
+
+        async function joinRoom() {
+            const code = document.getElementById('joinCode').value.toUpperCase();
+            if (code.length !== 5) return alert('請輸入5碼代碼');
+            
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
+            const snap = await getDoc(roomRef);
+            if (!snap.exists()) return alert('找不到該房間');
+            if (snap.data().status !== 'waiting') return alert('遊戲已開始或結束');
+            
+            state.mode = 'coop'; state.isHost = false; state.roomId = code;
+            await updateDoc(roomRef, { [`players.${userId}`]: { name: '防衛員 (隊友)', ready: false, passives: state.passives } });
+            enterLobby();
+        }
+        
+        function enterLobby() {
+            document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('lobbyModal').classList.remove('hidden');
+            document.getElementById('lobbyCodeDisplay').innerText = state.roomId;
+            
+            if (state.isHost) document.getElementById('btnStartCoop').classList.remove('hidden');
+            else document.getElementById('lobbyWaitText').classList.remove('hidden');
+            
+            const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
+            unsubRoom = onSnapshot(roomRef, (snap) => {
+                if (!snap.exists()) return backToMenu();
+                const data = snap.data();
+                state.playersData = data.players;
+                
+                if (data.status === 'waiting') {
+                    state.players = Object.keys(data.players);
+                    state.playerIndex = state.players.indexOf(userId);
+                    document.getElementById('lobbyPlayers').innerHTML = state.players.map((uid, i) => 
+                        `<div class="p-2 border-b border-slate-700 flex justify-between"><span>[防區 ${i+1}] ${data.players[uid].name}</span>${uid === data.hostId ? '<span class="text-yellow-500">房主</span>' : ''}</div>`
+                    ).join('');
+                }
+                
+                if ((data.status === 'placing' || data.status === 'playing') && !state.isPlaying) {
+                    document.getElementById('lobbyModal').classList.add('hidden');
+                    startCoopGame(data.players);
+                }
+
+                if (data.status === 'placing' && state.isHost) {
+                    let allReady = Object.values(data.players).every(p => p.ready);
+                    if (allReady && Object.keys(data.players).length === state.players.length) {
+                        let updates = { status: 'playing' };
+                        Object.keys(data.players).forEach(uid => updates[`players.${uid}.ready`] = false);
+                        updateDoc(roomRef, updates);
+                    }
+                }
+                
+                if (data.status === 'playing' && state.placingTower) {
+                    state.placingTower = false;
+                    document.getElementById('placementBanner').classList.add('hidden');
+                }
+                
+                if (state.isPlaying) {
+                    if (data.mainHp !== undefined && state.mainHp !== data.mainHp) {
+                        if (data.mainHp < state.mainHp) {
+                            playSound('hurt');
+                            let mainX = state.players.length * canvas.width - 40;
+                            if (getCameraX() + canvas.width >= mainX) createExplosion(mainX, canvas.height/2, '#facc15', 50);
+                        }
+                        state.mainHp = data.mainHp; updateUI();
+                        if (state.mainHp <= 0) gameOver();
+                    }
+
+                    if (data.playersHp) {
+                        let myHp = data.playersHp[userId];
+                        if (myHp !== undefined && state.hp !== myHp) {
+                            if (myHp < state.hp) {
+                                playSound('hurt');
+                                document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 300);
+                                createExplosion(state.towerX, state.towerY, '#f43f5e', 30);
+                            }
+                            state.hp = myHp; updateUI();
+                            if (state.hp <= 0) state.isDead = true;
+                        }
+                        Object.keys(data.playersHp).forEach(uid => { if (state.playersData[uid]) state.playersData[uid].hp = data.playersHp[uid]; });
+                    }
+                    
+                    state.coopTotalSlow = 0;
+                    Object.values(data.players).forEach(p => { state.coopTotalSlow += p.passives.slow || 0; });
+                    
+                    if (!state.isHost && data.enemiesStr) {
+                        try {
+                            const parsed = JSON.parse(data.enemiesStr);
+                            let newEnemies = [];
+                            parsed.forEach(eArr => {
+                                let en = state.enemies.find(ex => ex.id === eArr[0]);
+                                if (!en) en = new Enemy(eArr[0]);
+                                en.serverX = eArr[1]; en.serverY = eArr[2];
+                                en.hp = eArr[3]; en.maxHp = eArr[4]; en.stunTime = eArr[5] > 0 ? 1 : 0;
+                                newEnemies.push(en);
+                            });
+                            state.enemies = newEnemies; 
+                        } catch(e) {}
+                    }
+                    
+                    if (data.status === 'upgrading' && !state.isPaused) triggerLevelUp();
+                    
+                    if (data.status === 'upgrading' && state.isHost) {
+                        let allReady = Object.values(data.players).every(p => p.ready);
+                        if (allReady) {
+                            state.wave++; state.waveSpawned = 0; 
+                            let pCount = state.players ? state.players.length : 1;
+                            // 數量大量增加：基礎 30 + 隨波次與人數指數攀升
+                            state.waveTotal = Math.floor((30 + state.wave * 25) * pCount * (1 + state.wave * 0.1));
+                            let resetReady = {}; Object.keys(data.players).forEach(uid => resetReady[`players.${uid}.ready`] = false);
+                            resetReady.status = 'playing'; resetReady.wave = state.wave;
+                            updateDoc(roomRef, resetReady);
+                        }
+                    }
+                    
+                    if (data.status === 'playing' && state.isPaused) {
+                        state.wave = data.wave;
+                        document.getElementById('upgradeModal').classList.add('hidden');
+                        state.isPaused = false; lastTime = performance.now();
+                        updateUI();
+                    }
+                    
+                    if (data.status === 'gameover' && state.isPlaying) gameOver();
+                }
+            }, err => console.error(err));
+        }
+
+        function startCoopGame(playersData) {
+            state.isPlaying = true; state.isPaused = false;
+            state.score = 0; state.wave = 1; state.waveSpawned = 0; 
+            let pCount = state.players ? state.players.length : 1;
+            // 初始波次敵人總數大量增加
+            state.waveTotal = Math.floor(30 * pCount * 1.1); 
+            state.maxHp = 3; state.hp = 3; state.isDead = false;
+            state.mainHp = 20; state.rerolls = 3;
+            
+            state.lastSpaceTime = 0; state.lastAtTime = 0; state.lastDelTime = 0; 
+            state.lastEnterTime = 0; state.lastCtrlXTime = 0; state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0; state.lastBounceTime = 0; state.lastCtrlVTime = 0; state.lastSelectTime = 0;
+            
+            if (state.isHost) {
+                state.playersHp = {};
+                state.players.forEach(uid => state.playersHp[uid] = 3);
+            }
+            
+            state.enemies = []; state.particles = []; state.shield = null; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = [];
+            
+            state.placingTower = true;
+            state.towerPlaced = false;
+            
+            document.getElementById('placementBanner').innerText = '請點擊您的防區畫面放置「個人防禦塔」！';
+            document.getElementById('placementBanner').classList.remove('hidden');
+
+            document.getElementById('modeTitle').innerText = '合作防線 (共 ' + state.players.length + ' 區)';
+            document.getElementById('roomCodeDisplay').innerText = state.roomId;
+            document.getElementById('roomCodeDisplay').classList.remove('hidden');
+            
+            document.getElementById('uiLayer').classList.remove('hidden');
+            updateUI();
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+            
+            if (state.isHost) hostSyncLoop();
+        }
+
+        function startSingleGame() {
+            state.mode = 'single'; state.isPlaying = true; state.isPaused = false;
+            state.placingTower = false; state.isDead = false;
+            state.towerX = canvas.width / 2; state.towerY = canvas.height / 2;
+            state.score = 0; state.level = 1; state.exp = 0; state.expNeeded = 50; state.maxHp = 3; state.hp = 3; state.rerolls = 3;
+            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = [];
+            
+            state.lastSpaceTime = 0; state.lastAtTime = 0; state.lastDelTime = 0; 
+            state.lastEnterTime = 0; state.lastCtrlXTime = 0; state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0; state.lastBounceTime = 0; state.lastCtrlVTime = 0; state.lastSelectTime = 0;
+            
+            document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('uiLayer').classList.remove('hidden');
+            updateUI();
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function showTutorialBriefing() {
+            state.isPaused = true;
+            let currentWId = TUTORIAL_WEAPONS[state.tutorialStage];
+            let info = TUTORIAL_INFO[currentWId];
+            
+            if (info) {
+                document.getElementById('tbIcon').innerText = info.icon;
+                document.getElementById('tbTitle').innerText = info.title;
+                document.getElementById('tbDesc').innerText = info.desc;
+            }
+            
+            document.getElementById('uiLayer').classList.add('hidden');
+            document.getElementById('tutorialBriefingModal').classList.remove('hidden');
+            playSound('wave');
+        }
+
+        function startTutorialGame() {
+            state.mode = 'tutorial'; state.isPlaying = true; state.isPaused = false;
+            state.placingTower = false; state.isDead = false;
+            state.towerX = canvas.width / 2; state.towerY = canvas.height / 2;
+            state.score = 0; state.maxHp = 10; state.hp = 10; 
+            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = [];
+            
+            state.tutorialStage = 0;
+            state.tutorialKills = 0;
+            state.tutorialGoal = 10;
+            
+            document.getElementById('startModal').classList.add('hidden');
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            requestAnimationFrame(gameLoop);
+            
+            showTutorialBriefing();
+        }
+
+        function showCertificate() {
+            state.isPlaying = false;
+            document.getElementById('uiLayer').classList.add('hidden');
+            document.getElementById('certDate').innerText = new Date().toLocaleDateString();
+            document.getElementById('certificateModal').classList.remove('hidden');
+            playSound('levelup');
+        }
+        
+        function backToMenu() {
+            try { if (typeof unsubRoom === 'function') unsubRoom(); } catch(e){}
+            try { if (typeof unsubActions === 'function') unsubActions(); } catch(e){}
+            
+            // 如果瀏覽器攔截 reload 導致按鈕無效，這段安全備案會強行將所有畫面隱藏並叫出主選單
+            setTimeout(() => {
+                document.getElementById('gameOverModal').classList.add('hidden');
+                document.getElementById('certificateModal').classList.add('hidden');
+                document.getElementById('lobbyModal').classList.add('hidden');
+                document.getElementById('uiLayer').classList.add('hidden');
+                document.getElementById('startModal').classList.remove('hidden');
+                if (audioCtx.state === 'running') audioCtx.suspend();
+            }, 100);
+            
+            window.location.reload();
+        }
+
+        // 戰術選單發射邏輯
+        function fireTactical(type) {
+            state.lastSelectTime = performance.now();
+            document.getElementById('tacticalMenu').classList.add('hidden');
+            document.getElementById('tacticalMenu').classList.remove('flex');
+            state.tacticalOpen = false;
+            playSound('shoot');
+
+            let x = state.tacticalX;
+            let y = state.tacticalY;
+            let sx = state.towerX;
+            let sy = state.towerY;
+
+            if (type === 'ap') {
+                let dmg = 150 + getWeaponUpgLevel('select','sel_dmg')*100;
+                let r = 50;
+                state.grenades.push(new Grenade(sx, sy, x, y, 'ap', dmg, r, 0));
+            } else if (type === 'frag') {
+                let dmg = 25 + getWeaponUpgLevel('select','sel_aoe')*15;
+                let r = 250 + getWeaponUpgLevel('select','sel_aoe')*60;
+                state.grenades.push(new Grenade(sx, sy, x, y, 'frag', dmg, r, 0));
+            } else if (type === 'stun') {
+                let r = 300 + getWeaponUpgLevel('select','sel_stun')*50;
+                let stun = 4 + getWeaponUpgLevel('select','sel_stun')*1.5;
+                state.grenades.push(new Grenade(sx, sy, x, y, 'stun', 0, r, stun));
+            }
+        }
+
+        // ==================== 鍵盤與滑鼠事件 ====================
+        window.addEventListener('keydown', (e) => {
+            if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            hiddenInput.focus();
+
+            // 爆彈打字
+            if (!e.ctrlKey && state.unlockedWeapons.includes('typing') && e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
+                for (let i = 0; i < state.mapBombs.length; i++) {
+                    if (state.mapBombs[i].word === e.key) {
+                        let mb = state.mapBombs[i];
+                        let r = 200 + getWeaponUpgLevel('typing','type_aoe')*80;
+                        let dmg = 15 + getWeaponUpgLevel('typing','type_dmg')*10;
+                        createExplosion(mb.x, mb.y, '#a855f7', 30); playSound('destroy');
+                        
+                        if (getWeaponUpgLevel('typing','type_heal') > 0 && Math.random() < 0.3) {
+                            if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt:1});
+                            else { state.hp = Math.min(state.maxHp, state.hp + 1); updateUI(); }
+                        }
+                        
+                        if (state.mode === 'coop') sendCoopAction('bomb', {x:mb.x, y:mb.y, r:r, dmg:dmg});
+                        else {
+                            state.enemies.slice().forEach(en => { if (Math.hypot(en.x-mb.x, en.y-mb.y) < r) en.takeDamage(dmg); });
+                        }
+                        state.mapBombs.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+
+            // 空白鍵 (休眠)
+            if ((e.code === 'Space' || e.key === ' ') && state.unlockedWeapons.includes('space')) {
+                e.preventDefault();
+                let cd = getCD(60000 - getWeaponUpgLevel('space','space_cd')*5000);
+                if (performance.now() - state.lastSpaceTime > cd || state.lastSpaceTime === 0) {
+                    state.lastSpaceTime = performance.now(); playSound('wave');
+                    document.body.style.backgroundColor = '#3b0764'; setTimeout(() => document.body.style.backgroundColor = '#0f172a', 150);
+                    
+                    // 新增動畫：全畫面紫色力場爆發特效
+                    createExplosion(getCameraX() + canvas.width/2, canvas.height/2, '#8b5cf6', 80);
+
+                    let duration = 4.0 + getWeaponUpgLevel('space','space_time')*2.0;
+                    if (getWeaponUpgLevel('space','space_heal') > 0 && Math.random() < 0.5) {
+                        if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt:1});
+                        else { state.hp = Math.min(state.maxHp, state.hp + 1); updateUI(); }
+                    }
+                    
+                    let minX = getCameraX();
+                    let maxX = minX + canvas.width;
+                    if (state.mode === 'coop') {
+                        sendCoopAction('sleep', {duration, minX, maxX});
+                    } else {
+                        state.enemies.slice().forEach(en => {
+                            if (en.x >= minX - 100 && en.x <= maxX + 100) {
+                                en.stunTime = Math.max(en.stunTime, duration);
+                                en.takeDamage(Math.max(1, en.maxHp * 0.5));
+                            }
+                        });
+                    }
+                }
+            }
+
+            // @ (重新整理擊退)
+            if ((e.key === '@' || (e.shiftKey && e.key === '2')) && state.unlockedWeapons.includes('at')) {
+                e.preventDefault();
+                let cd = getCD(15000);
+                if (performance.now() - state.lastAtTime > cd || state.lastAtTime === 0) {
+                    state.lastAtTime = performance.now(); playSound('wave');
+                    
+                    // 新增動畫：主機綠色大爆發與背景閃爍
+                    createExplosion(state.towerX, state.towerY, '#22c55e', 50); 
+                    document.body.style.backgroundColor = '#14532d'; setTimeout(() => document.body.style.backgroundColor = '#0f172a', 150);
+
+                    let dmg = 10 + getWeaponUpgLevel('at','at_dmg')*15;
+                    let stun = getWeaponUpgLevel('at','at_stun') > 0 ? 1.0 + getWeaponUpgLevel('at','at_stun')*1.0 : 0;
+                    if (getWeaponUpgLevel('at','at_heal') > 0 && Math.random() < 0.4) {
+                        if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt:1});
+                        else { state.hp = Math.min(state.maxHp, state.hp + 1); updateUI(); }
+                    }
+                    if (state.mode === 'coop') sendCoopAction('refresh', {push: 800, dmg, stun});
+                    else {
+                        const cx = state.towerX, cy = state.towerY;
+                        state.enemies.slice().forEach(en => {
+                            en.x = cx + Math.cos(Math.atan2(en.y-cy, en.x-cx)) * 800; en.takeDamage(dmg); en.stunTime = stun;
+                        });
+                    }
+                }
+            }
+            
+            // Delete (單點強制刪除)
+            if ((e.code === 'Delete' || e.key === 'Backspace') && state.unlockedWeapons.includes('del')) {
+                e.preventDefault();
+                let cd = getCD(8000 - getWeaponUpgLevel('del','del_cd')*1000);
+                if (performance.now() - state.lastDelTime > cd || state.lastDelTime === 0) {
+                    state.lastDelTime = performance.now(); playSound('destroy');
+                    
+                    let target = null; let minDist = Infinity;
+                    state.enemies.forEach(en => {
+                        let d = Math.hypot(en.x - state.mouseX, en.y - state.mouseY);
+                        if (d < minDist) { target = en; minDist = d; }
+                    });
+                    
+                    if (target) {
+                        // 新增動畫：命中目標產生爆炸與紅光連接
+                        createExplosion(target.x, target.y, '#ef4444', 30);
+                        state.beams.push(new Beam(state.towerX, state.towerY, target.x, target.y, 4, '#ef4444'));
+
+                        let dmg = 25 + getWeaponUpgLevel('del','del_dmg')*15;
+                        if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: target.id, dmg});
+                        else target.takeDamage(dmg);
+                        
+                        if (getWeaponUpgLevel('del','del_aoe') > 0) {
+                            let r = 100;
+                            if (state.mode === 'coop') sendCoopAction('bomb', {x:target.x, y:target.y, r:r, dmg:dmg/2});
+                            else state.enemies.forEach(en => { if (en!==target && Math.hypot(en.x-target.x, en.y-target.y) < r) en.takeDamage(dmg/2); });
+                        }
+                    }
+                }
+            }
+            
+            // Enter (直擊光束)
+            if (e.key === 'Enter' && state.unlockedWeapons.includes('enter')) {
+                e.preventDefault();
+                let cd = getCD(18000);
+                if (performance.now() - state.lastEnterTime > cd || state.lastEnterTime === 0) {
+                    state.lastEnterTime = performance.now(); playSound('laser');
+                    let dmg = 100 + getWeaponUpgLevel('enter','enter_dmg')*50;
+                    let width = 60 + getWeaponUpgLevel('enter','enter_width')*30;
+                    let stun = getWeaponUpgLevel('enter','enter_stun') > 0 ? 2 : 0;
+                    
+                    let angle = Math.atan2(state.mouseY - state.towerY, state.mouseX - state.towerX);
+                    let length = Math.max(1000, canvas.width / 2);
+                    let endX = state.towerX + Math.cos(angle) * length;
+                    let endY = state.towerY + Math.sin(angle) * length;
+                    
+                    state.beams.push(new Beam(state.towerX, state.towerY, endX, endY, width, '#f59e0b'));
+                    
+                    if (state.mode === 'coop') sendCoopAction('enter', {tx: state.towerX, ty: state.towerY, mx: endX, my: endY, w: width, dmg, stun});
+                    else {
+                        state.enemies.slice().forEach(en => {
+                            if (distPointToSegment(en.x, en.y, state.towerX, state.towerY, endX, endY) < width + en.width/2) {
+                                en.takeDamage(dmg); if (stun > 0) en.stunTime = Math.max(en.stunTime, stun);
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Ctrl 組合技
+            if (e.ctrlKey) {
+                if (e.key.toLowerCase() === 'x' && state.unlockedWeapons.includes('ctrlx')) {
+                    e.preventDefault();
+                    let cd = getCD(10000);
+                    if (performance.now() - state.lastCtrlXTime > cd || state.lastCtrlXTime === 0) {
+                        state.lastCtrlXTime = performance.now(); playSound('laser');
+                        let w = getWeaponUpgLevel('ctrlx','cut_size') > 0 ? 1500 : 250;
+                        let h = getWeaponUpgLevel('ctrlx','cut_size') > 0 ? 1500 : 250;
+                        
+                        let cutArea = { x: state.mouseX, y: state.mouseY, w: w, h: h };
+                        
+                        // 修正動畫：不再用 ctx 直接畫（會立刻被清除），改存入 state.beams，產生帥氣的交叉光束動畫，且會漸漸淡出
+                        state.beams.push(new Beam(cutArea.x - w/2, cutArea.y - h/2, cutArea.x + w/2, cutArea.y + h/2, 12, '#f43f5e'));
+                        state.beams.push(new Beam(cutArea.x - w/2, cutArea.y + h/2, cutArea.x + w/2, cutArea.y - h/2, 12, '#f43f5e'));
+                        
+                        let dmg = 10;
+                        // 修正 X斬 的傷害判定，必須碰到 X 的兩條交叉線段才算命中
+                        state.enemies.slice().forEach(en => {
+                            let dist1 = distPointToSegment(en.x, en.y, cutArea.x - w/2, cutArea.y - h/2, cutArea.x + w/2, cutArea.y + h/2);
+                            let dist2 = distPointToSegment(en.x, en.y, cutArea.x - w/2, cutArea.y + h/2, cutArea.x + w/2, cutArea.y - h/2);
+                            let hitThickness = 30; // 給予線條足夠的寬容度
+                            if (dist1 < hitThickness + en.width/2 || dist2 < hitThickness + en.width/2) {
+                                if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: en.id, dmg});
+                                else en.takeDamage(dmg);
+                                
+                                if (getWeaponUpgLevel('ctrlx','cut_bleed') > 0) {
+                                    en.dotDmg = 1; en.dotDuration = getWeaponUpgLevel('ctrlx','cut_bleed')*2;
+                                }
+                            }
+                        });
+                    }
+                }
+                else if (e.key.toLowerCase() === 'c' && state.unlockedWeapons.includes('ctrlc')) {
+                    e.preventDefault();
+                    let cd = getCD(60000);
+                    if (performance.now() - state.lastCtrlCTime > cd || state.lastCtrlCTime === 0) {
+                        state.lastCtrlCTime = performance.now(); playSound('wave');
+                        let life = 4000 + getWeaponUpgLevel('ctrlc','copy_dur') * 2000;
+                        let reflect = getWeaponUpgLevel('ctrlc','copy_reflect') > 0 ? 5 + getWeaponUpgLevel('ctrlc','copy_reflect')*5 : 0;
+                        state.shield = { life: life, maxLife: life, radius: 120, reflect: reflect, update(dt) { this.life -= dt; } };
+                    }
+                }
+                else if (e.key.toLowerCase() === 'v' && state.unlockedWeapons.includes('ctrlv')) {
+                    e.preventDefault();
+                    let cd = getCD(8000);
+                    if ((!state.ctrlVActive || state.mode === 'tutorial') && (performance.now() - state.lastCtrlVTime > cd || state.lastCtrlVTime === 0)) {
+                        state.lastCtrlVTime = performance.now();
+                        state.ctrlVActive = true; playSound('laser');
+                        let size = 200 + getWeaponUpgLevel('ctrlv','paste_size')*50;
+                        let dmg = 2 + getWeaponUpgLevel('ctrlv','paste_dmg')*2;
+                        let stun = getWeaponUpgLevel('ctrlv','paste_stun') > 0;
+                        state.vweapons.push(new VWeapon(state.mouseX, state.mouseY, size, dmg, stun));
+                    }
+                }
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.key.toLowerCase() === 'v' || !e.ctrlKey) { state.ctrlVActive = false; }
+        });
+
+        // 雙擊反射彈
+        window.addEventListener('dblclick', (e) => {
+            if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            if (state.unlockedWeapons.includes('bounce')) {
+                let cd = getCD(3000 - getWeaponUpgLevel('bounce','bounce_cd')*500);
+                if (performance.now() - state.lastBounceTime > cd || state.lastBounceTime === 0) {
+                    state.lastBounceTime = performance.now(); playSound('shoot');
+                    let dmg = 20 + getWeaponUpgLevel('bounce','bounce_dmg')*10;
+                    let maxLife = 4000 + getWeaponUpgLevel('bounce','bounce_life')*2000;
+                    
+                    state.bounceBullets.push(new BounceBullet(state.towerX, state.towerY, state.mouseX, state.mouseY, 500, dmg, maxLife));
+                }
+            }
+        });
+
+        // 滾輪風暴
+        window.addEventListener('wheel', (e) => {
+            if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            if (state.unlockedWeapons.includes('scroll')) {
+                e.preventDefault();
+                let cd = getCD(1000); // 1秒冷卻
+                if (performance.now() - state.lastScrollTime > cd || state.lastScrollTime === 0) {
+                    state.lastScrollTime = performance.now(); playSound('wave');
+                    let r = 120 + getWeaponUpgLevel('scroll', 'scroll_size') * 45;
+                    let dmg = 5 + getWeaponUpgLevel('scroll', 'scroll_dmg') * 3;
+                    let push = getWeaponUpgLevel('scroll', 'scroll_push') * 30;
+                    
+                    state.rings.push(new WaveRing(state.towerX, state.towerY, r, '#0ea5e9'));
+                    createExplosion(state.towerX, state.towerY, '#0ea5e9', 30);
+                    
+                    if (state.mode === 'coop') sendCoopAction('scroll', {x: state.towerX, y: state.towerY, r, dmg, push});
+                    else {
+                        state.enemies.slice().forEach(en => {
+                            if (Math.hypot(en.x - state.towerX, en.y - state.towerY) < r) {
+                                en.takeDamage(dmg);
+                                if (push > 0) {
+                                    let angle = Math.atan2(en.y - state.towerY, en.x - state.towerX);
+                                    en.x += Math.cos(angle) * push; en.y += Math.sin(angle) * push;
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        }, { passive: false });
+
+        window.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            if (state.unlockedWeapons.includes('select')) {
+                let cd = getCD(10000);
+                if (performance.now() - state.lastSelectTime > cd || state.lastSelectTime === 0) {
+                    const menu = document.getElementById('tacticalMenu');
+                    menu.style.left = e.clientX + 'px';
+                    menu.style.top = e.clientY + 'px';
+                    menu.classList.remove('hidden');
+                    menu.classList.add('flex');
+                    state.tacticalX = state.mouseX;
+                    state.tacticalY = state.mouseY;
+                    state.tacticalOpen = true;
+                }
+            }
+        });
+
+        window.addEventListener('mousedown', (e) => {
+            if (state.tacticalOpen && e.button !== 2) {
+                // 安全檢查：如果點擊的是選單內部的按鈕，則不執行全域隱藏，讓 click 事件能順利觸發
+                if (e.target.closest('#tacticalMenu')) return; 
+                
+                document.getElementById('tacticalMenu').classList.add('hidden');
+                document.getElementById('tacticalMenu').classList.remove('flex');
+                state.tacticalOpen = false;
+            }
+            if (!state.isPlaying || state.isPaused || state.isDead) return;
+            
+            // 處理合作模式的主機放置邏輯
+            if (state.mode === 'coop' && state.placingTower) {
+                if (!state.towerPlaced) {
+                    state.towerX = state.mouseX;
+                    state.towerY = state.mouseY;
+                    state.towerPlaced = true;
+                    
+                    updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { 
+                        [`players.${userId}.towerX`]: state.towerX,
+                        [`players.${userId}.towerY`]: state.towerY,
+                        [`players.${userId}.ready`]: true
+                    });
+                    document.getElementById('placementBanner').innerText = '等待其他玩家完成佈署...';
+                }
+                return; // 放置模式下，不觸發後續的武器射擊動作
+            }
+
+            if (e.button === 0) {
+                state.isLeftMouseDown = true;
+                state.dragStartX = state.mouseX; state.dragStartY = state.mouseY;
+                state.isDragging = true;
+                state.wallDrawStartTime = performance.now();
+                state.lastWallX = state.mouseX; state.lastWallY = state.mouseY;
+            }
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (!state.isPlaying || state.isPaused) return;
+            state.lastMouseX = state.mouseX; state.lastMouseY = state.mouseY;
+            state.mouseX = e.clientX + getCameraX(); 
+            state.mouseY = e.clientY;
+            
+            if (state.placingTower || state.isDead) return;
+
+            // 雷射 (從玩家塔延伸到游標的光劍)
+            if (state.unlockedWeapons.includes('laser')) {
+                let maxDist = 300;
+                let angle = Math.atan2(state.mouseY - state.towerY, state.mouseX - state.towerX);
+                let distToMouse = Math.hypot(state.mouseX - state.towerX, state.mouseY - state.towerY);
+                let actualDist = Math.min(distToMouse, maxDist);
+                let endX = state.towerX + Math.cos(angle) * actualDist;
+                let endY = state.towerY + Math.sin(angle) * actualDist;
+                
+                // 修正動畫：大幅縮小雷射光劍的寬度，讓它變得更銳利敏捷 (由原本的 15 降至 4)
+                let w = 4 + getWeaponUpgLevel('laser','laser_width')*3;
+                let dmg = 0.5 + getWeaponUpgLevel('laser','laser_freq')*0.5;
+                
+                // 繪製藍色高能雷射光束 (從塔延伸)
+                state.beams.push(new Beam(state.towerX, state.towerY, endX, endY, w, 'rgba(59, 130, 246, 0.4)'));
+
+                state.enemies.forEach(en => {
+                    // 判斷敵人是否碰到光劍 (加入敵人本身的體積寬容度，確保整條光束都有傷害)
+                    if (distPointToSegment(en.x, en.y, state.towerX, state.towerY, endX, endY) < w + en.width/2) {
+                        if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: en.id, dmg});
+                        else en.takeDamage(dmg);
+                        playSound('laser');
+                        
+                        // 雷射散射
+                        if (getWeaponUpgLevel('laser','laser_split') > 0 && Math.random() < 0.1) {
+                            let other = state.enemies[Math.floor(Math.random()*state.enemies.length)];
+                            if (other && other !== en) {
+                                state.beams.push(new Beam(en.x, en.y, other.x, other.y, w/2, 'rgba(96, 165, 250, 0.6)'));
+                                if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: other.id, dmg: dmg/2});
+                                else other.takeDamage(dmg/2);
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 雷射牆繪製
+            if (state.isLeftMouseDown && state.unlockedWeapons.includes('laserwall')) {
+                let maxDrawTime = getWeaponUpgLevel('laserwall','wall_time') > 0 ? 2000 : 1000;
+                if (performance.now() - state.wallDrawStartTime < maxDrawTime) {
+                    if (Math.hypot(state.mouseX - state.lastWallX, state.mouseY - state.lastWallY) > 20) {
+                        let life = 3000 + getWeaponUpgLevel('laserwall','wall_time')*3000;
+                        let dmg = 1 + getWeaponUpgLevel('laserwall','wall_dmg')*2;
+                        let stun = getWeaponUpgLevel('laserwall','wall_stun') > 0 ? 1 : 0;
+                        state.walls.push(new WallSegment(state.lastWallX, state.lastWallY, state.mouseX, state.mouseY, life, dmg, stun));
+                        state.lastWallX = state.mouseX; state.lastWallY = state.mouseY;
+                    }
+                }
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (state.placingTower || state.isDead) return;
+            if (e.button === 0) {
+                state.isLeftMouseDown = false;
+                if (state.isDragging && state.unlockedWeapons.includes('bomb')) {
+                    let dist = Math.hypot(state.dragStartX - state.mouseX, state.dragStartY - state.mouseY);
+                    if (dist > 20) {
+                        let r = 80 + getWeaponUpgLevel('bomb','bomb_radius')*40;
+                        let dmg = 10 + getWeaponUpgLevel('bomb','bomb_radius')*5;
+                        createExplosion(state.mouseX, state.mouseY, '#f97316', 40); playSound('bomb');
+                        
+                        if (state.mode === 'coop') sendCoopAction('bomb', {x:state.mouseX, y:state.mouseY, r:r, dmg:dmg});
+                        else {
+                            state.enemies.slice().forEach(en => {
+                                if (Math.hypot(en.x - state.mouseX, en.y - state.mouseY) < r) {
+                                    en.takeDamage(dmg);
+                                    if (getWeaponUpgLevel('bomb','bomb_fire') > 0) {
+                                        en.dotDmg = 1; en.dotDuration = getWeaponUpgLevel('bomb','bomb_fire')*2;
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+                state.isDragging = false;
+            }
+        });
+        
+        // ==================== 按鈕事件綁定 ====================
+        document.getElementById('btnTutorial').addEventListener('click', startTutorialGame);
+        document.getElementById('btnLeaderboard').addEventListener('click', fetchLeaderboards);
+        document.getElementById('btnSingle').addEventListener('click', startSingleGame);
+        document.getElementById('btnHost').addEventListener('click', hostRoom);
+        document.getElementById('btnJoin').addEventListener('click', joinRoom);
+        document.getElementById('btnStartCoop').addEventListener('click', () => {
+            if (state.isHost && state.roomId) {
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { status: 'placing' });
+            }
+        });
+        document.getElementById('btnLeaveLobby').addEventListener('click', backToMenu);
+        document.getElementById('restartBtn').addEventListener('click', backToMenu);
+
+        document.getElementById('btnStartTutorialStage').addEventListener('click', () => {
+            document.getElementById('tutorialBriefingModal').classList.add('hidden');
+            document.getElementById('uiLayer').classList.remove('hidden');
+            
+            // 解鎖當前關卡的武器
+            state.unlockedWeapons = [TUTORIAL_WEAPONS[state.tutorialStage]];
+            
+            // 清空場上殘留的敵人和特效
+            state.bullets.length = 0; state.walls.length = 0; state.grenades.length = 0; state.vweapons.length = 0; state.bounceBullets.length = 0; state.beams.length = 0; state.shield = null; state.mapBombs.length = 0; state.enemies.length = 0;
+            
+            state.isPaused = false;
+            state.lastSpawnTime = performance.now();
+            lastTime = performance.now();
+            updateUI();
+        });
+
+        document.getElementById('btnSubmitScore').addEventListener('click', () => {
+            if (!isFirebaseReady) return backToMenu();
+            const pName = document.getElementById('playerNameGameOver').value.trim() || '神秘駭客';
+            document.getElementById('btnSubmitScore').innerText = '上傳中...';
+            document.getElementById('btnSubmitScore').disabled = true;
+
+            let p = Promise.resolve();
+            if (state.mode === 'single') {
+                p = addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard_single'), {
+                    name: pName, score: state.score, level: state.level, timestamp: serverTimestamp()
+                });
+            } else if (state.mode === 'coop' && state.isHost) {
+                p = addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard_coop'), {
+                    hostName: pName, score: state.score, wave: state.wave, players: state.players.length, timestamp: serverTimestamp()
+                });
+            }
+            p.catch(console.error).finally(() => {
+                backToMenu();
+            });
+        });
+
+        document.getElementById('btnGrenadeAP').addEventListener('click', (e) => { e.stopPropagation(); fireTactical('ap'); });
+        document.getElementById('btnGrenadeFrag').addEventListener('click', (e) => { e.stopPropagation(); fireTactical('frag'); });
+        document.getElementById('btnGrenadeStun').addEventListener('click', (e) => { e.stopPropagation(); fireTactical('stun'); });
+
+    </script>
+</body>
+</html>
