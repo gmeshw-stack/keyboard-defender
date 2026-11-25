@@ -23,9 +23,9 @@
         }
         #tbAnimCanvas {
             width: 100%;
-            max-width: 460px;
+            max-width: 520px;
             height: auto;
-            aspect-ratio: 460 / 220;
+            aspect-ratio: 520 / 220;
         }
         .heart { transition: all 0.3s ease; }
         .heart.lost { opacity: 0.2; filter: grayscale(100%); transform: scale(0.8); }
@@ -249,9 +249,9 @@
         </div>
     </div>
 
-    <!-- 闖關教學簡報畫面 (面向小學三年級：動態圖解版) -->
+    <!-- 闖關教學簡報畫面 (面向小學三年級：完整鍵盤定位 + 動態圖解版) -->
     <div id="tutorialBriefingModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex items-center justify-center z-50 hidden pointer-events-auto overflow-y-auto py-4 px-4">
-        <div class="bg-slate-800 p-5 md:p-7 rounded-3xl border-4 border-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.45)] max-w-xl text-center w-full my-auto">
+        <div class="bg-slate-800 p-5 md:p-7 rounded-3xl border-4 border-blue-400 shadow-[0_0_40px_rgba(59,130,246,0.45)] max-w-2xl text-center w-full my-auto">
             <!-- 標題與大圖示 -->
             <div class="flex items-center justify-center gap-3 mb-3">
                 <span class="text-4xl md:text-5xl animate-bounce" id="tbIcon">🖱️</span>
@@ -263,13 +263,13 @@
                 <span class="text-lg md:text-xl font-black text-white" id="tbActionBadge">🖱️ 動一動滑鼠</span>
             </div>
 
-            <!-- 即時動畫示範畫布 (左：手怎麼按 / 右：遊戲裡會怎樣) -->
+            <!-- 即時動畫示範畫布 (左：完整鍵盤/滑鼠操作 / 右：遊戲裡會怎樣) -->
             <div class="relative mb-3 bg-slate-950 rounded-2xl border-2 border-slate-600 p-2 shadow-inner overflow-hidden">
                 <div class="flex justify-between text-xs font-bold px-3 pb-1 text-slate-400">
-                    <span>🖐️ 手這樣操作</span>
+                    <span>🖐️ 手這樣操作 (看發光的位置！)</span>
                     <span>💥 遊戲裡的樣子</span>
                 </div>
-                <canvas id="tbAnimCanvas" width="460" height="220" class="mx-auto rounded-xl bg-slate-900"></canvas>
+                <canvas id="tbAnimCanvas" width="520" height="220" class="mx-auto rounded-xl bg-slate-900"></canvas>
             </div>
 
             <!-- 打字關專用：大寫/小寫醒目圖示卡 -->
@@ -480,6 +480,7 @@
         };
 
         const TUTORIAL_WEAPONS = ['laser', 'machinegun', 'bomb', 'laserwall', 'typing', 'scroll', 'ctrlx', 'ctrlc', 'ctrlv', 'bounce', 'space', 'at', 'del', 'enter', 'select'];
+        const KEYBOARD_TUTORIAL_WEAPONS = new Set(['typing', 'ctrlx', 'ctrlc', 'ctrlv', 'space', 'at', 'del', 'enter']);
         const TYPING_WORDS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
         const TYPING_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
         const TYPING_LOWER = "abcdefghijklmnopqrstuvwxyz".split("");
@@ -503,9 +504,49 @@
             'select':     { icon: '🎯', title: '右鍵 戰術選單', action: '🖱️ 按「滑鼠右鍵」➔ 左鍵選炸彈！', desc: '平常電腦：按右鍵會跳出「更多功能選單」！' }
         };
 
-        // ==================== 小學三年級專用：動態圖解動畫引擎 ====================
+        // ==================== 小學三年級專用：完整鍵盤定位 + 動態圖解動畫引擎 ====================
         let tbAnimId = null;
         let tbAnimStartTime = 0;
+
+        // 標準完整鍵盤佈局 (主鍵區 14.8u + 間距 0.4u + 編輯/方向鍵區 3u = 18.2u)
+        const FULL_KEYBOARD_ROWS = [
+            [
+                { id: '`', l: '`', w: 1 }, { id: '1', l: '1', w: 1 }, { id: '2', l: '2', w: 1 }, { id: '3', l: '3', w: 1 },
+                { id: '4', l: '4', w: 1 }, { id: '5', l: '5', w: 1 }, { id: '6', l: '6', w: 1 }, { id: '7', l: '7', w: 1 },
+                { id: '8', l: '8', w: 1 }, { id: '9', l: '9', w: 1 }, { id: '0', l: '0', w: 1 }, { id: '-', l: '-', w: 1 },
+                { id: '=', l: '=', w: 1 }, { id: 'Bksp', l: '←', w: 1.8 },
+                { gap: 0.4 },
+                { id: 'Ins', l: 'Ins', w: 1 }, { id: 'Hm', l: 'Hm', w: 1 }, { id: 'PU', l: 'PU', w: 1 }
+            ],
+            [
+                { id: 'Tab', l: 'Tab', w: 1.4 }, { id: 'Q', l: 'Q', w: 1 }, { id: 'W', l: 'W', w: 1 }, { id: 'E', l: 'E', w: 1 },
+                { id: 'R', l: 'R', w: 1 }, { id: 'T', l: 'T', w: 1 }, { id: 'Y', l: 'Y', w: 1 }, { id: 'U', l: 'U', w: 1 },
+                { id: 'I', l: 'I', w: 1 }, { id: 'O', l: 'O', w: 1 }, { id: 'P', l: 'P', w: 1 }, { id: '[', l: '[', w: 1 },
+                { id: ']', l: ']', w: 1 }, { id: '\\', l: '\\', w: 1.4 },
+                { gap: 0.4 },
+                { id: 'Del', l: 'Del', w: 1 }, { id: 'En', l: 'En', w: 1 }, { id: 'PD', l: 'PD', w: 1 }
+            ],
+            [
+                { id: 'Caps', l: 'Caps', w: 1.7 }, { id: 'A', l: 'A', w: 1 }, { id: 'S', l: 'S', w: 1 }, { id: 'D', l: 'D', w: 1 },
+                { id: 'F', l: 'F', w: 1 }, { id: 'G', l: 'G', w: 1 }, { id: 'H', l: 'H', w: 1 }, { id: 'J', l: 'J', w: 1 },
+                { id: 'K', l: 'K', w: 1 }, { id: 'L', l: 'L', w: 1 }, { id: ';', l: ';', w: 1 }, { id: "'", l: "'", w: 1 },
+                { id: 'Enter', l: 'Enter', w: 2.1 }
+            ],
+            [
+                { id: 'LShift', l: 'Shift', w: 2.2 }, { id: 'Z', l: 'Z', w: 1 }, { id: 'X', l: 'X', w: 1 }, { id: 'C', l: 'C', w: 1 },
+                { id: 'V', l: 'V', w: 1 }, { id: 'B', l: 'B', w: 1 }, { id: 'N', l: 'N', w: 1 }, { id: 'M', l: 'M', w: 1 },
+                { id: ',', l: ',', w: 1 }, { id: '.', l: '.', w: 1 }, { id: '/', l: '/', w: 1 }, { id: 'RShift', l: 'Shift', w: 2.6 },
+                { gap: 1.4 },
+                { id: 'Up', l: '↑', w: 1 }
+            ],
+            [
+                { id: 'LCtrl', l: 'Ctrl', w: 1.5 }, { id: 'Win', l: 'Win', w: 1.2 }, { id: 'LAlt', l: 'Alt', w: 1.3 },
+                { id: 'Space', l: '空白鍵 Space', w: 6.0 }, { id: 'RAlt', l: 'Alt', w: 1.2 }, { id: 'Fn', l: 'Fn', w: 1.2 },
+                { id: 'RCtrl', l: 'Ctrl', w: 2.4 },
+                { gap: 0.4 },
+                { id: 'Left', l: '←', w: 1 }, { id: 'Down', l: '↓', w: 1 }, { id: 'Right', l: '→', w: 1 }
+            ]
+        ];
 
         function stopTutorialAnim() {
             if (tbAnimId !== null) {
@@ -569,30 +610,141 @@
             c.restore();
         }
 
-        function drawMiniKey(c, x, y, w, h, label, pressed, color = '#38bdf8') {
-            c.save();
-            const dy = pressed ? 4 : 0;
-            // 鍵帽底座陰影
-            c.fillStyle = '#0f172a';
-            c.beginPath();
-            c.roundRect(x - w/2, y - h/2 + 5, w, h, 8);
-            c.fill();
+        function drawFullKeyboard(c, opts = {}) {
+            const {
+                highlightIds = [],
+                pressed = false,
+                color = '#38bdf8',
+                secondaryIds = [],
+                secondaryColor = '#22c55e',
+                capsOn = false,
+                pulsePhase = 0,
+                caption = '',
+                captionColor = '#e2e8f0',
+                overrideLabels = {}
+            } = opts;
 
-            // 鍵帽本體
-            c.fillStyle = pressed ? color : '#334155';
-            c.strokeStyle = pressed ? '#ffffff' : '#94a3b8';
-            c.lineWidth = pressed ? 3 : 2;
+            const kx = 10;
+            const ky = 22;
+            const u = 15.6;
+            const rh = 22;
+            const pad = 1.6;
+            const totalW = 18.2 * u;
+            const totalH = 5 * rh;
+
+            c.save();
+
+            // 鍵盤外框底座
+            c.fillStyle = '#0f172a';
+            c.strokeStyle = '#475569';
+            c.lineWidth = 2;
             c.beginPath();
-            c.roundRect(x - w/2, y - h/2 + dy, w, h, 8);
+            c.roundRect(kx - 5, ky - 6, totalW + 10, totalH + 12, 8);
             c.fill();
             c.stroke();
 
-            // 按鍵文字
-            c.fillStyle = pressed ? '#0f172a' : '#f8fafc';
-            c.font = `900 ${label.length > 4 ? 13 : 16}px 'Noto Sans TC', sans-serif`;
-            c.textAlign = 'center';
-            c.textBaseline = 'middle';
-            c.fillText(label, x, y + dy);
+            // 右上角 CapsLock 狀態小燈
+            c.fillStyle = capsOn ? '#22c55e' : '#334155';
+            c.beginPath();
+            c.arc(kx + totalW - 6, ky - 2, 2.5, 0, Math.PI * 2);
+            c.fill();
+
+            const litKeyCenters = [];
+
+            FULL_KEYBOARD_ROWS.forEach((row, rIdx) => {
+                let curX = kx;
+                const curY = ky + rIdx * rh;
+
+                row.forEach(k => {
+                    if (k.gap) {
+                        curX += k.gap * u;
+                        return;
+                    }
+                    const kw = k.w * u - pad;
+                    const kh = rh - pad - 1;
+                    const isPrimary = highlightIds.includes(k.id);
+                    const isSecondary = !isPrimary && secondaryIds.includes(k.id);
+
+                    const dy = (isPrimary && pressed) ? 1.8 : 0;
+
+                    c.save();
+                    if (isPrimary) {
+                        const glow = 8 + Math.sin(pulsePhase * Math.PI * 2) * 5;
+                        c.shadowColor = color;
+                        c.shadowBlur = Math.max(0, glow);
+                        c.fillStyle = pressed ? '#ffffff' : color;
+                        c.strokeStyle = '#ffffff';
+                        c.lineWidth = 2;
+                    } else if (isSecondary) {
+                        c.shadowColor = secondaryColor;
+                        c.shadowBlur = 6;
+                        c.fillStyle = secondaryColor;
+                        c.strokeStyle = '#dcfce7';
+                        c.lineWidth = 1.5;
+                    } else {
+                        c.fillStyle = '#1e293b';
+                        c.strokeStyle = '#334155';
+                        c.lineWidth = 1;
+                    }
+
+                    c.beginPath();
+                    c.roundRect(curX, curY + dy, kw, kh, 3);
+                    c.fill();
+                    c.stroke();
+                    c.shadowBlur = 0;
+
+                    const label = overrideLabels[k.id] || k.l;
+                    c.fillStyle = (isPrimary || isSecondary) ? '#0f172a' : '#94a3b8';
+                    let fontSize = 7.5;
+                    if (label.length >= 4) fontSize = 6.5;
+                    if (isPrimary && label.length <= 2) fontSize = 9.5;
+                    c.font = `${(isPrimary || isSecondary) ? '900' : '600'} ${fontSize}px 'Noto Sans TC', sans-serif`;
+                    c.textAlign = 'center';
+                    c.textBaseline = 'middle';
+                    c.fillText(label, curX + kw / 2, curY + kh / 2 + dy + 0.5);
+                    c.restore();
+
+                    if (isPrimary) {
+                        litKeyCenters.push({ cx: curX + kw / 2, cy: curY + kh / 2, w: kw, h: kh });
+                    }
+
+                    curX += k.w * u;
+                });
+            });
+
+            // 畫發光定位圈，幫助小朋友立刻鎖定按鍵位置
+            litKeyCenters.forEach(pt => {
+                c.save();
+                const ringP = (pulsePhase * 2) % 1;
+                const radius = Math.max(0, Math.max(pt.w, pt.h) * 0.45 + ringP * 14);
+                c.strokeStyle = pressed ? '#ffffff' : color;
+                c.lineWidth = 2;
+                c.globalAlpha = Math.max(0, 0.9 - ringP * 0.9);
+                c.beginPath();
+                c.arc(pt.cx, pt.cy, radius, 0, Math.PI * 2);
+                c.stroke();
+                c.restore();
+            });
+
+            // 底部清楚的大字提示膠囊
+            if (caption) {
+                const capX = kx + totalW / 2;
+                const capY = 178;
+                c.fillStyle = 'rgba(30, 41, 59, 0.95)';
+                c.strokeStyle = color;
+                c.lineWidth = 2;
+                c.beginPath();
+                c.roundRect(kx, capY - 18, totalW, 36, 18);
+                c.fill();
+                c.stroke();
+
+                c.fillStyle = captionColor;
+                c.font = "900 13px 'Noto Sans TC', sans-serif";
+                c.textAlign = 'center';
+                c.textBaseline = 'middle';
+                c.fillText(caption, capX, capY);
+            }
+
             c.restore();
         }
 
@@ -686,303 +838,335 @@
             if (!animCanvas) return;
             const ac = animCanvas.getContext('2d');
             tbAnimStartTime = performance.now();
+            const isKb = KEYBOARD_TUTORIAL_WEAPONS.has(wId);
 
             function renderFrame(now) {
                 const elapsed = (now - tbAnimStartTime) / 1000;
                 const t = (elapsed % 2.4) / 2.4; // 2.4秒一個循環
 
-                ac.clearRect(0, 0, 460, 220);
+                ac.clearRect(0, 0, 520, 220);
 
                 // 背景格線
                 ac.strokeStyle = 'rgba(71, 85, 105, 0.25)';
                 ac.lineWidth = 1;
-                for (let gx = 0; gx <= 460; gx += 30) { ac.beginPath(); ac.moveTo(gx, 0); ac.lineTo(gx, 220); ac.stroke(); }
-                for (let gy = 0; gy <= 220; gy += 30) { ac.beginPath(); ac.moveTo(0, gy); ac.lineTo(460, gy); ac.stroke(); }
+                for (let gx = 0; gx <= 520; gx += 30) { ac.beginPath(); ac.moveTo(gx, 0); ac.lineTo(gx, 220); ac.stroke(); }
+                for (let gy = 0; gy <= 220; gy += 30) { ac.beginPath(); ac.moveTo(0, gy); ac.lineTo(520, gy); ac.stroke(); }
 
-                // 中間分隔線
+                // 中間分隔線 (鍵盤關卡給左側完整鍵盤較寬空間)
+                const splitX = isKb ? 304 : 225;
                 ac.strokeStyle = 'rgba(148, 163, 184, 0.45)';
                 ac.setLineDash([6, 6]);
                 ac.lineWidth = 2;
-                ac.beginPath(); ac.moveTo(195, 12); ac.lineTo(195, 208); ac.stroke();
+                ac.beginPath(); ac.moveTo(splitX, 12); ac.lineTo(splitX, 208); ac.stroke();
                 ac.setLineDash([]);
 
-                const tx = 250, ty = 115; // 右側示範區的塔位置
+                if (!isKb) {
+                    // 滑鼠教學關卡：維持原本設定並置中對齊 520px 畫布
+                    ac.save();
+                    ac.translate(30, 0);
+                    const tx = 250, ty = 115;
 
-                if (wId === 'laser') {
-                    // 左：滑鼠左右移動
-                    const mx = 98 + Math.sin(t * Math.PI * 2) * 35;
-                    const my = 115 + Math.cos(t * Math.PI * 2) * 18;
-                    drawMiniMouse(ac, mx, my);
-                    ac.fillStyle = '#93c5fd'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('左右動一動！', 98, 185);
-                    // 右：藍色雷射掃過壞蛋
-                    drawMiniTower(ac, tx, ty);
-                    const cx = 360 + Math.sin(t * Math.PI * 2) * 35;
-                    const cy = 115 + Math.cos(t * Math.PI * 2) * 35;
-                    ac.strokeStyle = '#3b82f6'; ac.lineWidth = 6; ac.shadowColor = '#3b82f6'; ac.shadowBlur = 10;
-                    ac.beginPath(); ac.moveTo(tx, ty); ac.lineTo(cx, cy); ac.stroke(); ac.shadowBlur = 0;
-                    const hit = t > 0.35;
-                    drawMiniEnemy(ac, 365, 115, { dead: hit });
-                    if (hit) drawMiniBoom(ac, 365, 115, (t - 0.35) / 0.5, '#3b82f6');
-                    drawMiniCursor(ac, cx, cy);
-                }
-                else if (wId === 'machinegun') {
-                    // 左：按住左鍵
-                    drawMiniMouse(ac, 98, 110, { leftDown: true, leftColor: '#facc15', ripple: (t * 3) % 1 });
-                    ac.fillStyle = '#fde047'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('按住左鍵不放！', 98, 182);
-                    // 右：塔連續射出黃色子彈
-                    drawMiniTower(ac, tx, ty);
-                    for (let i = 0; i < 4; i++) {
-                        const bt = (t * 2 + i * 0.25) % 1;
-                        ac.fillStyle = '#facc15';
-                        ac.beginPath(); ac.arc(tx + 15 + bt * 120, ty, 4, 0, Math.PI * 2); ac.fill();
+                    if (wId === 'laser') {
+                        const mx = 98 + Math.sin(t * Math.PI * 2) * 35;
+                        const my = 115 + Math.cos(t * Math.PI * 2) * 18;
+                        drawMiniMouse(ac, mx, my);
+                        ac.fillStyle = '#93c5fd'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText('左右動一動！', 98, 185);
+                        drawMiniTower(ac, tx, ty);
+                        const cx = 360 + Math.sin(t * Math.PI * 2) * 35;
+                        const cy = 115 + Math.cos(t * Math.PI * 2) * 35;
+                        ac.strokeStyle = '#3b82f6'; ac.lineWidth = 6; ac.shadowColor = '#3b82f6'; ac.shadowBlur = 10;
+                        ac.beginPath(); ac.moveTo(tx, ty); ac.lineTo(cx, cy); ac.stroke(); ac.shadowBlur = 0;
+                        const hit = t > 0.35;
+                        drawMiniEnemy(ac, 365, 115, { dead: hit });
+                        if (hit) drawMiniBoom(ac, 365, 115, (t - 0.35) / 0.5, '#3b82f6');
+                        drawMiniCursor(ac, cx, cy);
                     }
-                    const dead = t > 0.65;
-                    drawMiniEnemy(ac, 385, ty, { dead });
-                    if (dead) drawMiniBoom(ac, 385, ty, (t - 0.65) / 0.35, '#facc15');
-                }
-                else if (wId === 'bomb') {
-                    // 左：按住拖曳再放開
-                    const dragging = t < 0.6;
-                    const prog = Math.min(1, t / 0.6);
-                    const mx = 65 + prog * 65;
-                    drawMiniMouse(ac, mx, 110, { leftDown: dragging, leftColor: '#f97316' });
-                    ac.fillStyle = '#fdba74'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText(dragging ? '1. 按住拖過去...' : '2. 放開爆炸！', 98, 182);
-                    // 右：橘色虛線與爆炸
-                    drawMiniTower(ac, tx, ty);
-                    const bx = 290 + prog * 95;
-                    if (dragging) {
-                        ac.strokeStyle = '#f97316'; ac.setLineDash([5, 5]); ac.lineWidth = 3;
-                        ac.beginPath(); ac.moveTo(290, ty); ac.lineTo(bx, ty); ac.stroke(); ac.setLineDash([]);
+                    else if (wId === 'machinegun') {
+                        drawMiniMouse(ac, 98, 110, { leftDown: true, leftColor: '#facc15', ripple: (t * 3) % 1 });
+                        ac.fillStyle = '#fde047'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText('按住左鍵不放！', 98, 182);
+                        drawMiniTower(ac, tx, ty);
+                        for (let i = 0; i < 4; i++) {
+                            const bt = (t * 2 + i * 0.25) % 1;
+                            ac.fillStyle = '#facc15';
+                            ac.beginPath(); ac.arc(tx + 15 + bt * 120, ty, 4, 0, Math.PI * 2); ac.fill();
+                        }
+                        const dead = t > 0.65;
+                        drawMiniEnemy(ac, 385, ty, { dead });
+                        if (dead) drawMiniBoom(ac, 385, ty, (t - 0.65) / 0.35, '#facc15');
                     }
-                    drawMiniEnemy(ac, 385, ty, { dead: !dragging });
-                    if (!dragging) drawMiniBoom(ac, 385, ty, (t - 0.6) / 0.4, '#f97316', 45);
-                    drawMiniCursor(ac, bx, ty);
-                }
-                else if (wId === 'laserwall') {
-                    // 左：按住左鍵上下畫線
-                    const prog = Math.min(1, t / 0.55);
-                    const my = 75 + prog * 70;
-                    drawMiniMouse(ac, 98, my, { leftDown: t < 0.55, leftColor: '#14b8a6' });
-                    ac.fillStyle = '#5eead4'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('按住左鍵畫光牆！', 98, 188);
-                    // 右：畫出青綠色光牆擋住敵人
-                    drawMiniTower(ac, tx, ty);
-                    ac.strokeStyle = '#14b8a6'; ac.lineWidth = 5; ac.shadowColor = '#14b8a6'; ac.shadowBlur = 10;
-                    ac.beginPath(); ac.moveTo(320, 60); ac.lineTo(320, 60 + prog * 110); ac.stroke(); ac.shadowBlur = 0;
-                    const ex = t < 0.6 ? (425 - t * 140) : (341 + (t - 0.6) * 90);
-                    drawMiniEnemy(ac, ex, ty);
-                    if (t >= 0.55 && t < 0.8) drawMiniBoom(ac, 325, ty, (t - 0.55) / 0.25, '#14b8a6', 20);
-                }
-                else if (wId === 'typing') {
-                    const demoChar = state.tutorialCase === 'upper' ? 'A' : 'a';
-                    const pressed = t > 0.35 && t < 0.65;
-                    drawMiniKey(ac, 98, 100, 62, 54, demoChar, pressed, '#c084fc');
-                    // CapsLock 小燈號提示
-                    ac.fillStyle = state.tutorialCase === 'upper' ? '#22c55e' : '#64748b';
-                    ac.beginPath(); ac.arc(46, 165, 6, 0, Math.PI * 2); ac.fill();
-                    ac.fillStyle = '#e2e8f0'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'left';
-                    ac.fillText(state.tutorialCase === 'upper' ? '大寫燈亮 (CapsLock)' : '小寫 (關掉CapsLock)', 58, 170);
-                    // 右：紫色字母爆彈引爆
-                    drawMiniTower(ac, tx, ty);
-                    const exploded = t > 0.45;
-                    if (!exploded) {
-                        ac.fillStyle = '#3b0764'; ac.strokeStyle = '#a855f7'; ac.lineWidth = 3;
-                        ac.beginPath(); ac.arc(365, ty, 22, 0, Math.PI * 2); ac.fill(); ac.stroke();
-                        ac.fillStyle = '#fff'; ac.font = 'bold 22px monospace'; ac.textAlign = 'center'; ac.textBaseline = 'middle';
-                        ac.fillText(demoChar, 365, ty);
-                    } else {
-                        drawMiniBoom(ac, 365, ty, (t - 0.45) / 0.5, '#a855f7', 55);
+                    else if (wId === 'bomb') {
+                        const dragging = t < 0.6;
+                        const prog = Math.min(1, t / 0.6);
+                        const mx = 65 + prog * 65;
+                        drawMiniMouse(ac, mx, 110, { leftDown: dragging, leftColor: '#f97316' });
+                        ac.fillStyle = '#fdba74'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText(dragging ? '1. 按住拖過去...' : '2. 放開爆炸！', 98, 182);
+                        drawMiniTower(ac, tx, ty);
+                        const bx = 290 + prog * 95;
+                        if (dragging) {
+                            ac.strokeStyle = '#f97316'; ac.setLineDash([5, 5]); ac.lineWidth = 3;
+                            ac.beginPath(); ac.moveTo(290, ty); ac.lineTo(bx, ty); ac.stroke(); ac.setLineDash([]);
+                        }
+                        drawMiniEnemy(ac, 385, ty, { dead: !dragging });
+                        if (!dragging) drawMiniBoom(ac, 385, ty, (t - 0.6) / 0.4, '#f97316', 45);
+                        drawMiniCursor(ac, bx, ty);
                     }
-                    drawMiniEnemy(ac, 395, ty - 25, { dead: exploded });
-                    drawMiniEnemy(ac, 395, ty + 25, { dead: exploded });
-                }
-                else if (wId === 'scroll') {
-                    const offset = Math.sin(t * Math.PI * 6) * 4;
-                    drawMiniMouse(ac, 98, 110, { wheelActive: true, wheelOffset: offset });
-                    ac.fillStyle = '#38bdf8'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('↕️ 上下滾動滾輪！', 98, 182);
-                    // 右：塔發出藍色擴散波
-                    drawMiniTower(ac, 330, ty);
-                    const r = Math.max(0, 15 + t * 90);
-                    ac.strokeStyle = '#0ea5e9'; ac.lineWidth = 4; ac.globalAlpha = Math.max(0, 1 - t);
-                    ac.beginPath(); ac.arc(330, ty, r, 0, Math.PI * 2); ac.stroke(); ac.globalAlpha = 1;
-                    const dead = t > 0.5;
-                    drawMiniEnemy(ac, 395, ty, { dead });
-                    if (dead) drawMiniBoom(ac, 395, ty, (t - 0.5) / 0.4, '#0ea5e9');
-                }
-                else if (wId === 'ctrlx') {
-                    const pressed = t > 0.35 && t < 0.7;
-                    drawMiniKey(ac, 62, 108, 60, 48, 'Ctrl', pressed, '#fb7185');
-                    ac.fillStyle = '#fff'; ac.font = 'bold 18px sans-serif'; ac.textAlign = 'center'; ac.fillText('+', 104, 112);
-                    drawMiniKey(ac, 144, 108, 52, 48, 'X', pressed, '#fb7185');
-                    ac.fillStyle = '#fda4af'; ac.font = 'bold 13px sans-serif'; ac.fillText('兩顆一起按！', 98, 175);
-                    // 右：粉紅大 X 斬
-                    drawMiniTower(ac, tx, ty);
-                    const slashed = t > 0.4;
-                    drawMiniEnemy(ac, 365, ty, { dead: slashed });
-                    if (slashed && t < 0.85) {
-                        ac.strokeStyle = '#f43f5e'; ac.lineWidth = 7; ac.shadowColor = '#f43f5e'; ac.shadowBlur = 12;
-                        ac.beginPath();
-                        ac.moveTo(330, ty - 35); ac.lineTo(400, ty + 35);
-                        ac.moveTo(330, ty + 35); ac.lineTo(400, ty - 35);
-                        ac.stroke(); ac.shadowBlur = 0;
-                        drawMiniBoom(ac, 365, ty, (t - 0.4) / 0.45, '#f43f5e');
+                    else if (wId === 'laserwall') {
+                        const prog = Math.min(1, t / 0.55);
+                        const my = 75 + prog * 70;
+                        drawMiniMouse(ac, 98, my, { leftDown: t < 0.55, leftColor: '#14b8a6' });
+                        ac.fillStyle = '#5eead4'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText('按住左鍵畫光牆！', 98, 188);
+                        drawMiniTower(ac, tx, ty);
+                        ac.strokeStyle = '#14b8a6'; ac.lineWidth = 5; ac.shadowColor = '#14b8a6'; ac.shadowBlur = 10;
+                        ac.beginPath(); ac.moveTo(320, 60); ac.lineTo(320, 60 + prog * 110); ac.stroke(); ac.shadowBlur = 0;
+                        const ex = t < 0.6 ? (425 - t * 140) : (341 + (t - 0.6) * 90);
+                        drawMiniEnemy(ac, ex, ty);
+                        if (t >= 0.55 && t < 0.8) drawMiniBoom(ac, 325, ty, (t - 0.55) / 0.25, '#14b8a6', 20);
                     }
-                }
-                else if (wId === 'ctrlc') {
-                    const pressed = t > 0.25 && t < 0.6;
-                    drawMiniKey(ac, 62, 108, 60, 48, 'Ctrl', pressed, '#818cf8');
-                    ac.fillStyle = '#fff'; ac.font = 'bold 18px sans-serif'; ac.textAlign = 'center'; ac.fillText('+', 104, 112);
-                    drawMiniKey(ac, 144, 108, 52, 48, 'C', pressed, '#818cf8');
-                    ac.fillStyle = '#a5b4fc'; ac.font = 'bold 13px sans-serif'; ac.fillText('打開無敵保護罩！', 98, 175);
-                    // 右：保護罩秒殺壞蛋
-                    drawMiniTower(ac, 320, ty);
-                    if (t > 0.25) {
-                        ac.fillStyle = 'rgba(99, 102, 241, 0.22)'; ac.strokeStyle = '#6366f1'; ac.lineWidth = 4;
-                        ac.beginPath(); ac.arc(320, ty, 52, 0, Math.PI * 2); ac.fill(); ac.stroke();
+                    else if (wId === 'scroll') {
+                        const offset = Math.sin(t * Math.PI * 6) * 4;
+                        drawMiniMouse(ac, 98, 110, { wheelActive: true, wheelOffset: offset });
+                        ac.fillStyle = '#38bdf8'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText('↕️ 上下滾動滾輪！', 98, 182);
+                        drawMiniTower(ac, 330, ty);
+                        const r = Math.max(0, 15 + t * 90);
+                        ac.strokeStyle = '#0ea5e9'; ac.lineWidth = 4; ac.globalAlpha = Math.max(0, 1 - t);
+                        ac.beginPath(); ac.arc(330, ty, r, 0, Math.PI * 2); ac.stroke(); ac.globalAlpha = 1;
+                        const dead = t > 0.5;
+                        drawMiniEnemy(ac, 395, ty, { dead });
+                        if (dead) drawMiniBoom(ac, 395, ty, (t - 0.5) / 0.4, '#0ea5e9');
                     }
-                    const ex = 435 - t * 110;
-                    const hit = ex <= 378 && t > 0.25;
-                    drawMiniEnemy(ac, ex, ty, { dead: hit });
-                    if (hit) drawMiniBoom(ac, 372, ty, Math.min(1, (t - 0.5) / 0.4), '#818cf8', 35);
-                }
-                else if (wId === 'ctrlv') {
-                    const pressed = t > 0.2 && t < 0.8;
-                    drawMiniKey(ac, 62, 108, 60, 48, 'Ctrl', pressed, '#e879f9');
-                    ac.fillStyle = '#fff'; ac.font = 'bold 18px sans-serif'; ac.textAlign = 'center'; ac.fillText('+', 104, 112);
-                    drawMiniKey(ac, 144, 108, 52, 48, 'V', pressed, '#e879f9');
-                    ac.fillStyle = '#f0abfc'; ac.font = 'bold 13px sans-serif'; ac.fillText('按住不放發射 V 斬！', 98, 175);
-                    // 右：V 字斬飛向塔並消滅敵人
-                    drawMiniTower(ac, tx, ty);
-                    const vx = 415 - t * 140;
-                    const vs = Math.max(10, 42 - t * 20);
-                    ac.strokeStyle = '#d946ef'; ac.lineWidth = 6; ac.shadowColor = '#d946ef'; ac.shadowBlur = 10;
-                    ac.beginPath(); ac.moveTo(vx - vs/2, ty - vs); ac.lineTo(vx, ty + 10); ac.lineTo(vx + vs/2, ty - vs); ac.stroke(); ac.shadowBlur = 0;
-                    const hit = vx < 355;
-                    drawMiniEnemy(ac, 355, ty, { dead: hit });
-                    if (hit) drawMiniBoom(ac, 355, ty, (t - 0.42) / 0.45, '#d946ef');
-                }
-                else if (wId === 'bounce') {
-                    const click1 = t > 0.15 && t < 0.28;
-                    const click2 = t > 0.34 && t < 0.47;
-                    drawMiniMouse(ac, 98, 110, { leftDown: click1 || click2, leftColor: '#06b6d4', ripple: click1 ? (t-0.15)/0.13 : (click2 ? (t-0.34)/0.13 : 0) });
-                    ac.fillStyle = '#22d3ee'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('左鍵快點兩下！嗒嗒！', 98, 182);
-                    // 右：青色光球撞牆反彈
-                    drawMiniTower(ac, tx, ty);
-                    if (t > 0.4) {
-                        const bt = (t - 0.4) / 0.6;
-                        const bx = bt < 0.5 ? (tx + bt * 2 * 170) : (tx + 170 - (bt - 0.5) * 2 * 90);
-                        const by = bt < 0.5 ? (ty - bt * 2 * 70) : (ty - 70 + (bt - 0.5) * 2 * 90);
-                        ac.fillStyle = '#06b6d4'; ac.shadowColor = '#06b6d4'; ac.shadowBlur = 12;
-                        ac.beginPath(); ac.arc(bx, by, 7, 0, Math.PI * 2); ac.fill(); ac.shadowBlur = 0;
-                        const hit = bt > 0.7;
-                        drawMiniEnemy(ac, 370, 100, { dead: hit });
-                        if (hit) drawMiniBoom(ac, 370, 100, (bt - 0.7) / 0.3, '#06b6d4');
-                    } else {
-                        drawMiniEnemy(ac, 370, 100);
+                    else if (wId === 'bounce') {
+                        const click1 = t > 0.15 && t < 0.28;
+                        const click2 = t > 0.34 && t < 0.47;
+                        drawMiniMouse(ac, 98, 110, { leftDown: click1 || click2, leftColor: '#06b6d4', ripple: click1 ? (t-0.15)/0.13 : (click2 ? (t-0.34)/0.13 : 0) });
+                        ac.fillStyle = '#22d3ee'; ac.font = 'bold 14px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText('左鍵快點兩下！嗒嗒！', 98, 182);
+                        drawMiniTower(ac, tx, ty);
+                        if (t > 0.4) {
+                            const bt = (t - 0.4) / 0.6;
+                            const bx = bt < 0.5 ? (tx + bt * 2 * 170) : (tx + 170 - (bt - 0.5) * 2 * 90);
+                            const by = bt < 0.5 ? (ty - bt * 2 * 70) : (ty - 70 + (bt - 0.5) * 2 * 90);
+                            ac.fillStyle = '#06b6d4'; ac.shadowColor = '#06b6d4'; ac.shadowBlur = 12;
+                            ac.beginPath(); ac.arc(bx, by, 7, 0, Math.PI * 2); ac.fill(); ac.shadowBlur = 0;
+                            const hit = bt > 0.7;
+                            drawMiniEnemy(ac, 370, 100, { dead: hit });
+                            if (hit) drawMiniBoom(ac, 370, 100, (bt - 0.7) / 0.3, '#06b6d4');
+                        } else {
+                            drawMiniEnemy(ac, 370, 100);
+                        }
                     }
-                }
-                else if (wId === 'space') {
-                    const pressed = t > 0.35 && t < 0.65;
-                    drawMiniKey(ac, 98, 110, 150, 44, '空白鍵 Space', pressed, '#a78bfa');
-                    ac.fillStyle = '#c4b5fd'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('按下最長的按鍵！', 98, 175);
-                    // 右：全場變紫暫停且扣血
-                    drawMiniTower(ac, tx, ty);
-                    const active = t > 0.4;
-                    if (active && t < 0.58) {
-                        ac.fillStyle = 'rgba(139, 92, 246, 0.28)';
-                        ac.fillRect(200, 10, 250, 200);
+                    else if (wId === 'select') {
+                        const step1 = t < 0.35;
+                        const step2 = t >= 0.35 && t < 0.65;
+                        drawMiniMouse(ac, 98, 108, {
+                            rightDown: step1, rightColor: '#c084fc',
+                            leftDown: step2, leftColor: '#facc15',
+                            ripple: step1 ? t/0.35 : (step2 ? (t-0.35)/0.3 : 0)
+                        });
+                        ac.fillStyle = '#e2e8f0'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
+                        ac.fillText(step1 ? '1. 按「右鍵」開選單' : '2. 按「左鍵」選炸彈！', 98, 182);
+                        drawMiniTower(ac, tx, ty);
+                        if (t >= 0.2 && t < 0.62) {
+                            ac.fillStyle = '#1e293b'; ac.strokeStyle = '#94a3b8'; ac.lineWidth = 2;
+                            ac.beginPath(); ac.roundRect(330, 55, 96, 62, 8); ac.fill(); ac.stroke();
+                            ac.fillStyle = step2 ? '#dc2626' : '#334155';
+                            ac.fillRect(336, 62, 84, 16);
+                            ac.fillStyle = '#fff'; ac.font = 'bold 10px sans-serif'; ac.textAlign = 'left';
+                            ac.fillText('🎯 穿甲榴彈', 340, 74);
+                            ac.fillText('💥 破片榴彈', 340, 92);
+                            ac.fillText('⚡ 閃光榴彈', 340, 110);
+                            drawMiniCursor(ac, 385, 72);
+                        }
+                        if (t >= 0.62 && t < 0.82) {
+                            const gp = (t - 0.62) / 0.2;
+                            ac.fillStyle = '#ef4444';
+                            ac.beginPath(); ac.arc(tx + gp * 135, ty + gp * 15, 6, 0, Math.PI * 2); ac.fill();
+                        }
+                        const boom = t >= 0.82;
+                        drawMiniEnemy(ac, 385, ty + 15, { dead: boom });
+                        if (boom) drawMiniBoom(ac, 385, ty + 15, (t - 0.82) / 0.18, '#ef4444', 42);
                     }
-                    drawMiniEnemy(ac, 350, 80, { stunned: active, hpRatio: active ? 0.5 : 1 });
-                    drawMiniEnemy(ac, 405, 145, { stunned: active, hpRatio: active ? 0.5 : 1 });
-                }
-                else if (wId === 'at') {
-                    const pressed = t > 0.35 && t < 0.7;
-                    drawMiniKey(ac, 60, 108, 66, 48, 'Shift', pressed, '#4ade80');
-                    ac.fillStyle = '#fff'; ac.font = 'bold 18px sans-serif'; ac.textAlign = 'center'; ac.fillText('+', 106, 112);
-                    drawMiniKey(ac, 148, 108, 54, 48, '2 @', pressed, '#4ade80');
-                    ac.fillStyle = '#86efac'; ac.font = 'bold 13px sans-serif'; ac.fillText('按住 Shift 再按 2！', 98, 175);
-                    // 右：綠色衝擊波把壞蛋吹飛
-                    drawMiniTower(ac, tx, ty);
-                    const pushed = t > 0.4;
-                    if (pushed) {
-                        drawMiniBoom(ac, tx, ty, (t - 0.4) / 0.5, '#22c55e', 110);
+                    ac.restore();
+                } else {
+                    // 鍵盤教學關卡：左側完整鍵盤定位發光 + 右側遊戲效果示範
+                    const tx = 340, ty = 115;
+
+                    if (wId === 'typing') {
+                        const isUpper = state.tutorialCase === 'upper';
+                        const demoChar = isUpper ? 'A' : 'a';
+                        const pressed = t > 0.35 && t < 0.65;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['A'],
+                            secondaryIds: isUpper ? ['Caps'] : [],
+                            secondaryColor: '#22c55e',
+                            capsOn: isUpper,
+                            pressed,
+                            color: '#c084fc',
+                            pulsePhase: t,
+                            overrideLabels: { A: demoChar },
+                            caption: isUpper ? '找到發光的英文字母！(先開 Caps 大寫燈)' : '找到發光的英文字母！(關掉 Caps 小寫)',
+                            captionColor: '#e9d5ff'
+                        });
+                        // 右：紫色字母爆彈引爆
+                        drawMiniTower(ac, tx, ty);
+                        const exploded = t > 0.45;
+                        if (!exploded) {
+                            ac.fillStyle = '#3b0764'; ac.strokeStyle = '#a855f7'; ac.lineWidth = 3;
+                            ac.beginPath(); ac.arc(435, ty, 22, 0, Math.PI * 2); ac.fill(); ac.stroke();
+                            ac.fillStyle = '#fff'; ac.font = 'bold 22px monospace'; ac.textAlign = 'center'; ac.textBaseline = 'middle';
+                            ac.fillText(demoChar, 435, ty);
+                        } else {
+                            drawMiniBoom(ac, 435, ty, (t - 0.45) / 0.5, '#a855f7', 50);
+                        }
+                        drawMiniEnemy(ac, 470, ty - 28, { dead: exploded });
+                        drawMiniEnemy(ac, 470, ty + 28, { dead: exploded });
                     }
-                    const ex = pushed ? 335 + (t - 0.4) * 180 : 335;
-                    drawMiniEnemy(ac, Math.min(440, ex), ty, { dead: t > 0.75 });
-                }
-                else if (wId === 'del') {
-                    const pressed = t > 0.4 && t < 0.75;
-                    drawMiniKey(ac, 98, 110, 96, 50, 'Delete', pressed, '#f87171');
-                    ac.fillStyle = '#fca5a5'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('滑鼠指著 ➔ 按 Delete！', 98, 175);
-                    // 右：紅光精準點殺壞蛋
-                    drawMiniTower(ac, tx, ty);
-                    const zapped = t > 0.45;
-                    drawMiniEnemy(ac, 380, ty, { dead: zapped });
-                    if (zapped && t < 0.75) {
-                        ac.strokeStyle = '#ef4444'; ac.lineWidth = 4;
-                        ac.beginPath(); ac.moveTo(tx, ty); ac.lineTo(380, ty); ac.stroke();
-                        drawMiniBoom(ac, 380, ty, (t - 0.45) / 0.3, '#ef4444', 35);
+                    else if (wId === 'ctrlx') {
+                        const pressed = t > 0.35 && t < 0.7;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['LCtrl', 'X'],
+                            pressed,
+                            color: '#fb7185',
+                            pulsePhase: t,
+                            caption: '左下角 [Ctrl] + [X] 兩顆一起按！',
+                            captionColor: '#fecdd3'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const slashed = t > 0.4;
+                        drawMiniEnemy(ac, 445, ty, { dead: slashed });
+                        if (slashed && t < 0.85) {
+                            ac.strokeStyle = '#f43f5e'; ac.lineWidth = 7; ac.shadowColor = '#f43f5e'; ac.shadowBlur = 12;
+                            ac.beginPath();
+                            ac.moveTo(415, ty - 32); ac.lineTo(475, ty + 32);
+                            ac.moveTo(415, ty + 32); ac.lineTo(475, ty - 32);
+                            ac.stroke(); ac.shadowBlur = 0;
+                            drawMiniBoom(ac, 445, ty, (t - 0.4) / 0.45, '#f43f5e');
+                        }
                     }
-                    drawMiniCursor(ac, 380, ty);
-                }
-                else if (wId === 'enter') {
-                    const pressed = t > 0.35 && t < 0.7;
-                    drawMiniKey(ac, 98, 110, 108, 52, 'Enter ↵', pressed, '#fbbf24');
-                    ac.fillStyle = '#fde68a'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText('瞄準壞蛋 ➔ 按 Enter！', 98, 175);
-                    // 右：超粗金黃光束貫穿
-                    drawMiniTower(ac, tx, ty);
-                    const fired = t > 0.4;
-                    if (fired && t < 0.85) {
-                        ac.strokeStyle = '#f59e0b'; ac.lineWidth = 26; ac.shadowColor = '#f59e0b'; ac.shadowBlur = 16;
-                        ac.beginPath(); ac.moveTo(tx + 12, ty); ac.lineTo(445, ty); ac.stroke(); ac.shadowBlur = 0;
+                    else if (wId === 'ctrlc') {
+                        const pressed = t > 0.25 && t < 0.6;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['LCtrl', 'C'],
+                            pressed,
+                            color: '#818cf8',
+                            pulsePhase: t,
+                            caption: '左下角 [Ctrl] + [C] 打開保護罩！',
+                            captionColor: '#c7d2fe'
+                        });
+                        drawMiniTower(ac, 390, ty);
+                        if (t > 0.25) {
+                            ac.fillStyle = 'rgba(99, 102, 241, 0.22)'; ac.strokeStyle = '#6366f1'; ac.lineWidth = 4;
+                            ac.beginPath(); ac.arc(390, ty, 48, 0, Math.PI * 2); ac.fill(); ac.stroke();
+                        }
+                        const ex = 505 - t * 105;
+                        const hit = ex <= 442 && t > 0.25;
+                        drawMiniEnemy(ac, ex, ty, { dead: hit });
+                        if (hit) drawMiniBoom(ac, 438, ty, Math.min(1, (t - 0.5) / 0.4), '#818cf8', 32);
                     }
-                    drawMiniEnemy(ac, 345, ty, { dead: fired });
-                    drawMiniEnemy(ac, 405, ty, { dead: fired });
-                    if (fired) {
-                        drawMiniBoom(ac, 345, ty, (t - 0.4) / 0.45, '#f59e0b');
-                        drawMiniBoom(ac, 405, ty, (t - 0.4) / 0.45, '#f59e0b');
+                    else if (wId === 'ctrlv') {
+                        const pressed = t > 0.2 && t < 0.8;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['LCtrl', 'V'],
+                            pressed,
+                            color: '#e879f9',
+                            pulsePhase: t,
+                            caption: '左下角 [Ctrl] + [V] 按住發射 V 斬！',
+                            captionColor: '#f5d0fe'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const vx = 490 - t * 125;
+                        const vs = Math.max(10, 40 - t * 18);
+                        ac.strokeStyle = '#d946ef'; ac.lineWidth = 6; ac.shadowColor = '#d946ef'; ac.shadowBlur = 10;
+                        ac.beginPath(); ac.moveTo(vx - vs/2, ty - vs); ac.lineTo(vx, ty + 10); ac.lineTo(vx + vs/2, ty - vs); ac.stroke(); ac.shadowBlur = 0;
+                        const hit = vx < 435;
+                        drawMiniEnemy(ac, 435, ty, { dead: hit });
+                        if (hit) drawMiniBoom(ac, 435, ty, (t - 0.42) / 0.45, '#d946ef');
                     }
-                }
-                else if (wId === 'select') {
-                    // 左：1.點右鍵 -> 2.左鍵選炸彈
-                    const step1 = t < 0.35;
-                    const step2 = t >= 0.35 && t < 0.65;
-                    drawMiniMouse(ac, 98, 108, {
-                        rightDown: step1, rightColor: '#c084fc',
-                        leftDown: step2, leftColor: '#facc15',
-                        ripple: step1 ? t/0.35 : (step2 ? (t-0.35)/0.3 : 0)
-                    });
-                    ac.fillStyle = '#e2e8f0'; ac.font = 'bold 13px sans-serif'; ac.textAlign = 'center';
-                    ac.fillText(step1 ? '1. 按「右鍵」開選單' : '2. 按「左鍵」選炸彈！', 98, 182);
-                    // 右：跳出選單 -> 發射榴彈爆炸
-                    drawMiniTower(ac, tx, ty);
-                    if (t >= 0.2 && t < 0.62) {
-                        ac.fillStyle = '#1e293b'; ac.strokeStyle = '#94a3b8'; ac.lineWidth = 2;
-                        ac.beginPath(); ac.roundRect(330, 55, 96, 62, 8); ac.fill(); ac.stroke();
-                        ac.fillStyle = step2 ? '#dc2626' : '#334155';
-                        ac.fillRect(336, 62, 84, 16);
-                        ac.fillStyle = '#fff'; ac.font = 'bold 10px sans-serif'; ac.textAlign = 'left';
-                        ac.fillText('🎯 穿甲榴彈', 340, 74);
-                        ac.fillText('💥 破片榴彈', 340, 92);
-                        ac.fillText('⚡ 閃光榴彈', 340, 110);
-                        drawMiniCursor(ac, 385, 72);
+                    else if (wId === 'space') {
+                        const pressed = t > 0.35 && t < 0.65;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['Space'],
+                            pressed,
+                            color: '#a78bfa',
+                            pulsePhase: t,
+                            caption: '最下面長長的那顆就是「空白鍵」！',
+                            captionColor: '#ddd6fe'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const active = t > 0.4;
+                        if (active && t < 0.58) {
+                            ac.fillStyle = 'rgba(139, 92, 246, 0.28)';
+                            ac.fillRect(310, 10, 202, 200);
+                        }
+                        drawMiniEnemy(ac, 425, 80, { stunned: active, hpRatio: active ? 0.5 : 1 });
+                        drawMiniEnemy(ac, 475, 145, { stunned: active, hpRatio: active ? 0.5 : 1 });
                     }
-                    if (t >= 0.62 && t < 0.82) {
-                        const gp = (t - 0.62) / 0.2;
-                        ac.fillStyle = '#ef4444';
-                        ac.beginPath(); ac.arc(tx + gp * 135, ty + gp * 15, 6, 0, Math.PI * 2); ac.fill();
+                    else if (wId === 'at') {
+                        const pressed = t > 0.35 && t < 0.7;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['LShift', '2'],
+                            pressed,
+                            color: '#4ade80',
+                            pulsePhase: t,
+                            overrideLabels: { '2': '2@' },
+                            caption: '按住左邊 [Shift] 再按上面 [2 @]！',
+                            captionColor: '#bbf7d0'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const pushed = t > 0.4;
+                        if (pushed) {
+                            drawMiniBoom(ac, tx, ty, (t - 0.4) / 0.5, '#22c55e', 95);
+                        }
+                        const ex = pushed ? 415 + (t - 0.4) * 160 : 415;
+                        drawMiniEnemy(ac, Math.min(502, ex), ty, { dead: t > 0.75 });
                     }
-                    const boom = t >= 0.82;
-                    drawMiniEnemy(ac, 385, ty + 15, { dead: boom });
-                    if (boom) drawMiniBoom(ac, 385, ty + 15, (t - 0.82) / 0.18, '#ef4444', 42);
+                    else if (wId === 'del') {
+                        const pressed = t > 0.4 && t < 0.75;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['Del'],
+                            pressed,
+                            color: '#f87171',
+                            pulsePhase: t,
+                            caption: '在右邊找到發光的 [Delete / Del] 鍵！',
+                            captionColor: '#fecaca'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const zapped = t > 0.45;
+                        drawMiniEnemy(ac, 460, ty, { dead: zapped });
+                        if (zapped && t < 0.75) {
+                            ac.strokeStyle = '#ef4444'; ac.lineWidth = 4;
+                            ac.beginPath(); ac.moveTo(tx, ty); ac.lineTo(460, ty); ac.stroke();
+                            drawMiniBoom(ac, 460, ty, (t - 0.45) / 0.3, '#ef4444', 32);
+                        }
+                        drawMiniCursor(ac, 460, ty);
+                    }
+                    else if (wId === 'enter') {
+                        const pressed = t > 0.35 && t < 0.7;
+                        drawFullKeyboard(ac, {
+                            highlightIds: ['Enter'],
+                            pressed,
+                            color: '#fbbf24',
+                            pulsePhase: t,
+                            caption: '瞄準壞蛋 ➔ 按中間偏右大顆的 [Enter]！',
+                            captionColor: '#fef08a'
+                        });
+                        drawMiniTower(ac, tx, ty);
+                        const fired = t > 0.4;
+                        if (fired && t < 0.85) {
+                            ac.strokeStyle = '#f59e0b'; ac.lineWidth = 24; ac.shadowColor = '#f59e0b'; ac.shadowBlur = 16;
+                            ac.beginPath(); ac.moveTo(tx + 12, ty); ac.lineTo(508, ty); ac.stroke(); ac.shadowBlur = 0;
+                        }
+                        drawMiniEnemy(ac, 425, ty, { dead: fired });
+                        drawMiniEnemy(ac, 475, ty, { dead: fired });
+                        if (fired) {
+                            drawMiniBoom(ac, 425, ty, (t - 0.4) / 0.45, '#f59e0b');
+                            drawMiniBoom(ac, 475, ty, (t - 0.4) / 0.45, '#f59e0b');
+                        }
+                    }
                 }
 
                 tbAnimId = requestAnimationFrame(renderFrame);
