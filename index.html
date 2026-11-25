@@ -117,7 +117,7 @@
                     <p class="mb-2">⚠️ 系統警告：大量垃圾檔案試圖癱瘓主機！</p>
                     <ul class="list-disc pl-5 space-y-2 text-sm mb-4">
                         <li>使用 15 種不同的「滑鼠與鍵盤技巧」消滅檔案。</li>
-                        <li><span class="text-green-400">闖關教學</span>：循序漸進練習每一把武器，破關拿證書。</li>
+                        <li><span class="text-green-400">闖關教學</span>：循序漸進練習每一把武器，支援接關，破關拿證書。</li>
                         <li><span class="text-blue-400">單人模式</span>：擊殺敵人獲取經驗升級，挑戰高分。</li>
                         <li><span class="text-purple-400">合作模式</span>：每位玩家佈署防禦塔，共同保護右方的主機！</li>
                     </ul>
@@ -146,7 +146,11 @@
                 <div id="authStatus" class="text-sm text-yellow-400 animate-pulse mb-1">正在連線至國防網路...</div>
                 
                 <button id="btnTutorial" class="btn-menu bg-green-600 hover:bg-green-500 shadow-[0_0_15px_rgba(22,163,74,0.5)]">
-                    🎓 武器闖關教學
+                    🎓 武器闖關教學 (從頭開始)
+                </button>
+
+                <button id="btnTutorialContinue" class="btn-menu bg-emerald-600 hover:bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] hidden">
+                    ▶️ 接關：繼續第 1 關
                 </button>
 
                 <button id="btnSingle" class="btn-menu bg-blue-600 hover:bg-blue-500 shadow-[0_0_15px_rgba(37,99,235,0.5)]">
@@ -246,7 +250,7 @@
             <h2 class="text-3xl font-black text-blue-400 mb-4" id="tbTitle">武器名稱</h2>
             <div class="bg-slate-900 p-5 rounded-xl border border-slate-700 mb-6 text-left shadow-inner">
                 <p class="text-yellow-400 font-bold mb-2 flex items-center gap-2"><span>💻</span> 現實電腦對應操作：</p>
-                <p class="text-slate-300 text-sm leading-relaxed" id="tbDesc">說明內容...</p>
+                <p class="text-slate-300 text-sm leading-relaxed whitespace-pre-line" id="tbDesc">說明內容...</p>
             </div>
             <button id="btnStartTutorialStage" class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg">
                 開始實戰演練
@@ -287,6 +291,10 @@
                     上傳分數並返回
                 </button>
             </div>
+
+            <button id="btnRetryTutorial" class="bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg mb-3 hidden">
+                🔄 原地接關 (重新挑戰本關)
+            </button>
 
             <button id="restartBtn" class="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-lg">
                 返回主選單
@@ -403,7 +411,7 @@
         resize();
 
         /** ====================
-         *  武器與被動資料結構 (精準 14 把武器，皆為 3 項升級設定)
+         *  武器與被動資料結構 (精準 15 把武器，皆為 3 項升級設定)
          *  ==================== */
         const WEAPONS = {
             'laser': { id: 'laser', name: '雷射滑鼠', short: '雷射', tip: '【預設開啟】滑鼠游標滑過敵人造成持續傷害。', color: '#3b82f6', upgrades: [{ id: 'laser_width', name: '寬度強化', desc: '雷射變寬', max: 3 }, { id: 'laser_freq', name: '高頻雷射', desc: '傷害提升', max: 4 }, { id: 'laser_split', name: '光譜折射', desc: '自動折射', max: 3 }] },
@@ -437,6 +445,8 @@
 
         const TUTORIAL_WEAPONS = ['laser', 'machinegun', 'bomb', 'laserwall', 'typing', 'scroll', 'ctrlx', 'ctrlc', 'ctrlv', 'bounce', 'space', 'at', 'del', 'enter', 'select'];
         const TYPING_WORDS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+        const TYPING_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+        const TYPING_LOWER = "abcdefghijklmnopqrstuvwxyz".split("");
 
         const TUTORIAL_INFO = {
             'laser': { icon: '🖱️', title: '【雷射滑鼠】游標掃掠', desc: '對應現實中的「游標操作」。滑鼠游標是您與電腦互動的最基本方式，用於精準定位、選取目標與滑動檢視。在防衛戰中，它是一把持續輸出的高能光束劍！' },
@@ -464,7 +474,7 @@
             exp: 0, expNeeded: 50,
             hp: 3, maxHp: 3, mainHp: 20, rerolls: 3,
             upgradesPending: 0, inUpgradeSession: false,
-            tutorialStage: 0, tutorialKills: 0, tutorialGoal: 10,
+            tutorialStage: 0, tutorialKills: 0, tutorialGoal: 10, tutorialCase: 'lower',
             
             enemies: [], mapBombs: [], particles: [], bullets: [], walls: [], vweapons: [], beams: [], shield: null, rings: [], bounceBullets: [], grenades: [],
             spawnRate: 3000, lastSpawnTime: 0, lastBombSpawnTime: 0, timeElapsed: 0,
@@ -486,6 +496,34 @@
         
         let unsubRoom = null;
         let unsubActions = null;
+
+        // --- 闖關進度儲存與讀取 (支援接關) ---
+        function saveTutorialProgress(stage) {
+            try { localStorage.setItem('kd_tutorial_stage', String(stage)); } catch(e) {}
+        }
+        function getSavedTutorialProgress() {
+            try {
+                let s = parseInt(localStorage.getItem('kd_tutorial_stage') || '0', 10);
+                return (isNaN(s) || s < 0 || s >= TUTORIAL_WEAPONS.length) ? 0 : s;
+            } catch(e) { return 0; }
+        }
+        function clearTutorialProgress() {
+            try { localStorage.removeItem('kd_tutorial_stage'); } catch(e) {}
+        }
+        function updateTutorialContinueBtn() {
+            const btn = document.getElementById('btnTutorialContinue');
+            if (!btn) return;
+            const saved = getSavedTutorialProgress();
+            if (saved > 0) {
+                const wId = TUTORIAL_WEAPONS[saved];
+                const wName = WEAPONS[wId] ? WEAPONS[wId].short : '';
+                btn.innerText = `▶️ 接關：繼續第 ${saved + 1} 關 (${wName})`;
+                btn.classList.remove('hidden');
+            } else {
+                btn.classList.add('hidden');
+            }
+        }
+        updateTutorialContinueBtn();
 
         function getWeaponUpgLevel(wId, uId) { return state.weaponUpgrades[wId] ? state.weaponUpgrades[wId].filter(id => id === uId).length : 0; }
         function getCD(baseCD) { 
@@ -666,7 +704,15 @@
                 const margin = 120;
                 this.x = fixedX !== null ? fixedX : camX + margin + Math.random() * (canvas.width - margin * 2);
                 this.y = fixedY !== null ? fixedY : margin + Math.random() * (canvas.height - margin * 2);
-                this.word = TYPING_WORDS[Math.floor(Math.random() * TYPING_WORDS.length)];
+                
+                // 闖關模式：依照該關卡開始時決定的大小寫統一生成；單人/合作維持原本大小寫混合
+                if (state.mode === 'tutorial') {
+                    const pool = state.tutorialCase === 'upper' ? TYPING_UPPER : TYPING_LOWER;
+                    this.word = pool[Math.floor(Math.random() * pool.length)];
+                } else {
+                    this.word = TYPING_WORDS[Math.floor(Math.random() * TYPING_WORDS.length)];
+                }
+                
                 this.color = '#a855f7'; this.radius = 25; this.pulse = 0;
             }
             update(dt) { this.pulse += dt * 0.005; }
@@ -1011,7 +1057,8 @@
                 document.getElementById('levelLabel').innerHTML = `教學關卡: <span class="font-bold text-yellow-400">${state.tutorialStage + 1} / ${TUTORIAL_WEAPONS.length}</span>`;
                 let currentWId = TUTORIAL_WEAPONS[state.tutorialStage];
                 if (currentWId && WEAPONS[currentWId]) {
-                    document.getElementById('weaponTip').innerText = `[教學目標：擊殺 ${state.tutorialGoal} 隻] ${WEAPONS[currentWId].name}：${WEAPONS[currentWId].tip}`;
+                    let caseTip = currentWId === 'typing' ? (state.tutorialCase === 'upper' ? '【本關全大寫 A-Z】' : '【本關全小寫 a-z】') : '';
+                    document.getElementById('weaponTip').innerText = `[教學目標：擊殺 ${state.tutorialGoal} 隻] ${caseTip}${WEAPONS[currentWId].name}：${WEAPONS[currentWId].tip}`;
                 }
             } else {
                 document.getElementById('levelLabel').innerHTML = (state.mode === 'coop' ? '波次 ' : '等級 ') + `<span id="levelDisplay" class="font-bold text-white">${state.mode === 'coop' ? state.wave : state.level}</span>`;
@@ -1088,9 +1135,11 @@
                     if (state.tutorialKills >= state.tutorialGoal) {
                         state.tutorialStage++;
                         if (state.tutorialStage >= TUTORIAL_WEAPONS.length) {
+                            clearTutorialProgress();
                             showCertificate();
                         } else {
                             state.tutorialKills = 0;
+                            saveTutorialProgress(state.tutorialStage);
                             showTutorialBriefing();
                         }
                     }
@@ -1590,6 +1639,15 @@
             document.getElementById('finalLevel').innerText = finalProgress;
             
             document.getElementById('gameOverModal').classList.remove('hidden');
+
+            const btnRetry = document.getElementById('btnRetryTutorial');
+            if (state.mode === 'tutorial') {
+                saveTutorialProgress(state.tutorialStage);
+                btnRetry.innerText = `🔄 原地接關 (重新挑戰第 ${state.tutorialStage + 1} 關)`;
+                btnRetry.classList.remove('hidden');
+            } else {
+                btnRetry.classList.add('hidden');
+            }
             
             if (isFirebaseReady && (state.mode === 'single' || (state.mode === 'coop' && state.isHost))) {
                 document.getElementById('scoreSubmitDiv').classList.remove('hidden');
@@ -1842,8 +1900,18 @@
             
             if (info) {
                 document.getElementById('tbIcon').innerText = info.icon;
-                document.getElementById('tbTitle').innerText = info.title;
-                document.getElementById('tbDesc').innerText = info.desc;
+                document.getElementById('tbTitle').innerText = `第 ${state.tutorialStage + 1} 關：${info.title}`;
+                
+                if (currentWId === 'typing') {
+                    // 關卡開始時確定本關全大寫或全小寫
+                    state.tutorialCase = Math.random() < 0.5 ? 'upper' : 'lower';
+                    let caseNotice = state.tutorialCase === 'upper'
+                        ? '\n\n⚠️【本關指定格式】：本關字母「全部為大寫 (A-Z)」，建議開啟 CapsLock 鍵！'
+                        : '\n\n⚠️【本關指定格式】：本關字母「全部為小寫 (a-z)」，請確認關閉 CapsLock 鍵！';
+                    document.getElementById('tbDesc').innerText = info.desc + caseNotice;
+                } else {
+                    document.getElementById('tbDesc').innerText = info.desc;
+                }
             }
             
             document.getElementById('uiLayer').classList.add('hidden');
@@ -1851,20 +1919,49 @@
             playSound('wave');
         }
 
-        function startTutorialGame() {
-            state.mode = 'tutorial'; state.isPlaying = true; state.isPaused = false;
+        function startTutorialGame(startStage = 0) {
+            state.mode = 'tutorial'; state.isPlaying = true; state.isPaused = true;
             state.placingTower = false; state.isDead = false;
             state.towerX = canvas.width / 2; state.towerY = canvas.height / 2;
             state.score = 0; state.maxHp = 10; state.hp = 10; 
-            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = [];
+            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = []; state.shield = null;
             
-            state.tutorialStage = 0;
+            state.tutorialStage = Math.max(0, Math.min(TUTORIAL_WEAPONS.length - 1, startStage));
             state.tutorialKills = 0;
             state.tutorialGoal = 10;
+            saveTutorialProgress(state.tutorialStage);
             
             document.getElementById('startModal').classList.add('hidden');
             
             if (audioCtx.state === 'suspended') audioCtx.resume();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+            
+            showTutorialBriefing();
+        }
+
+        function retryTutorialStage() {
+            state.isPlaying = true;
+            state.isPaused = true;
+            state.isDead = false;
+            state.hp = 10;
+            state.maxHp = 10;
+            state.tutorialKills = 0;
+            state.isDragging = false;
+            state.isLeftMouseDown = false;
+            state.ctrlVActive = false;
+            state.tacticalOpen = false;
+            document.getElementById('tacticalMenu').classList.add('hidden');
+            document.getElementById('tacticalMenu').classList.remove('flex');
+            
+            state.enemies.length = 0; state.particles.length = 0; state.bullets.length = 0; state.walls.length = 0;
+            state.vweapons.length = 0; state.beams.length = 0; state.rings.length = 0; state.bounceBullets.length = 0;
+            state.grenades.length = 0; state.mapBombs.length = 0; state.shield = null;
+
+            document.getElementById('gameOverModal').classList.add('hidden');
+            
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            lastTime = performance.now();
             requestAnimationFrame(gameLoop);
             
             showTutorialBriefing();
@@ -1889,6 +1986,7 @@
                 document.getElementById('lobbyModal').classList.add('hidden');
                 document.getElementById('uiLayer').classList.add('hidden');
                 document.getElementById('startModal').classList.remove('hidden');
+                updateTutorialContinueBtn();
                 if (audioCtx.state === 'running') audioCtx.suspend();
             }, 100);
             
@@ -2321,7 +2419,9 @@
         });
         
         // ==================== 按鈕事件綁定 ====================
-        document.getElementById('btnTutorial').addEventListener('click', startTutorialGame);
+        document.getElementById('btnTutorial').addEventListener('click', () => startTutorialGame(0));
+        document.getElementById('btnTutorialContinue').addEventListener('click', () => startTutorialGame(getSavedTutorialProgress()));
+        document.getElementById('btnRetryTutorial').addEventListener('click', retryTutorialStage);
         document.getElementById('btnLeaderboard').addEventListener('click', fetchLeaderboards);
         document.getElementById('btnSingle').addEventListener('click', startSingleGame);
         document.getElementById('btnHost').addEventListener('click', hostRoom);
