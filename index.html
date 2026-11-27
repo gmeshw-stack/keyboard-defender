@@ -93,9 +93,13 @@
                 <div id="weaponListTray" class="flex gap-2 flex-wrap mt-1"></div>
             </div>
             
-            <!-- 合作模式小地圖 -->
-            <div id="minimapContainer" class="hidden absolute left-1/2 -translate-x-1/2 top-4 w-[300px] h-[30px] bg-slate-900/80 border-2 border-slate-600 rounded-lg shadow-lg overflow-hidden pointer-events-auto">
-                <canvas id="minimapCanvas" width="300" height="30"></canvas>
+            <!-- 合作模式總地圖 -->
+            <div id="minimapContainer" class="hidden absolute left-1/2 -translate-x-1/2 top-3 w-[330px] md:w-[460px] bg-slate-900/90 border-2 border-slate-500 rounded-xl shadow-2xl overflow-hidden pointer-events-auto px-2.5 py-1.5 backdrop-blur-md">
+                <div class="flex justify-between items-center text-[11px] font-bold text-slate-300 mb-1 px-0.5">
+                    <span id="minimapZoneInfo" class="text-sky-400">📍 你的防區: 第 1 區</span>
+                    <span id="minimapProgressInfo" class="text-amber-300">👾 敵軍進度: 0%</span>
+                </div>
+                <canvas id="minimapCanvas" width="440" height="44" class="w-full h-[44px] rounded bg-slate-950 block"></canvas>
             </div>
 
             <!-- 個人血量 -->
@@ -219,13 +223,34 @@
         </div>
     </div>
 
+    <!-- 系統提示訊息框 (取代阻斷式視窗) -->
+    <div id="toastBanner" class="fixed top-6 left-1/2 -translate-x-1/2 bg-slate-900/95 border-2 border-amber-400 text-amber-200 px-6 py-3 rounded-full shadow-2xl z-[100] font-bold text-sm md:text-base pointer-events-none hidden transition-all"></div>
+
     <!-- 合作模式大廳 -->
-    <div id="lobbyModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center z-50 hidden pointer-events-auto">
-        <div class="bg-slate-800 p-8 rounded-2xl border-2 border-purple-500 shadow-[0_0_30px_rgba(147,51,234,0.3)] max-w-md w-full text-center">
+    <div id="lobbyModal" class="absolute top-0 left-0 w-full h-full bg-slate-900/95 backdrop-blur-md flex flex-col items-center justify-center z-50 hidden pointer-events-auto overflow-y-auto py-6 px-4">
+        <div class="bg-slate-800 p-6 md:p-8 rounded-2xl border-2 border-purple-500 shadow-[0_0_30px_rgba(147,51,234,0.3)] max-w-lg w-full text-center my-auto">
             <h2 class="text-3xl font-black text-purple-400 mb-2">合作防線大廳</h2>
-            <div class="text-slate-400 mb-6">房間代碼：<span id="lobbyCodeDisplay" class="text-white font-mono text-2xl bg-black px-3 py-1 rounded select-all"></span></div>
+            <div class="text-slate-400 mb-4">房間代碼：<span id="lobbyCodeDisplay" class="text-white font-mono text-2xl bg-black px-3 py-1 rounded select-all"></span></div>
+
+            <!-- 合作子模式選擇區 (房主可切換，免費額度耗盡時自動鎖定即時模式) -->
+            <div class="bg-slate-900/90 border border-slate-700 rounded-xl p-3.5 mb-4 text-left">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-xs font-bold text-slate-300">🎮 合作作戰模式 <span id="lobbyModeHint" class="text-slate-400 font-normal">(房主選擇)</span></span>
+                    <span id="rtdbQuotaBanner" class="text-[11px] font-bold text-yellow-400">⏳ 偵測即時連線中...</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button id="btnModeRelay" type="button" class="p-3 rounded-xl border-2 border-blue-400 bg-blue-600/25 text-left transition-all">
+                        <div class="font-black text-sm text-blue-300">🛡️ 接力防區模式</div>
+                        <div class="text-[11px] text-slate-300 mt-1 leading-snug">每人管理獨立防區，接力守護最右側主機（省流量穩定）</div>
+                    </button>
+                    <button id="btnModeShared" type="button" class="p-3 rounded-xl border-2 border-slate-700 bg-slate-800/60 text-left transition-all opacity-60 cursor-not-allowed" disabled>
+                        <div class="font-black text-sm text-emerald-300">⚡ 同圖即時共鬥</div>
+                        <div class="text-[11px] text-slate-300 mt-1 leading-snug">所有人同張地圖，即時看到隊友游標與發招動作！</div>
+                    </button>
+                </div>
+            </div>
             
-            <div class="bg-slate-900 rounded-xl p-4 mb-6 text-left h-48 overflow-y-auto" id="lobbyPlayers">
+            <div class="bg-slate-900 rounded-xl p-4 mb-5 text-left h-44 overflow-y-auto" id="lobbyPlayers">
                 <!-- 玩家列表 -->
             </div>
             
@@ -308,7 +333,7 @@
                 認證機構：國防網路防衛中心<br>
                 核發日期：<span id="certDate" class="text-white"></span>
             </div>
-            <button onclick="window.location.reload()" class="bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-black py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-xl">
+            <button id="btnCertBack" class="bg-yellow-600 hover:bg-yellow-500 text-slate-900 font-black py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105 active:scale-95 w-full text-xl">
                 領取證書並返回主選單
             </button>
         </div>
@@ -341,31 +366,53 @@
     <!-- Firebase 與遊戲主邏輯 -->
     <script type="module">
         /** ====================
-         *  Firebase 引入與初始化
+         *  Firebase 引入與初始化 (Firestore + Realtime Database 雙引擎)
          *  ==================== */
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getDatabase, ref as dbRef, set as dbSet, push as dbPush, onValue, onChildAdded, remove as dbRemove, onDisconnect } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-database.js";
 
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'def-keyboard-defense';
+        const RTDB_URL = "https://keyboard-defender-default-rtdb.asia-southeast1.firebasedatabase.app/";
         
-        // --- 注入您專屬的 Firebase 設定檔 ---
+        // --- 注入您專屬的 Firebase 設定檔 (含 Realtime Database 網址) ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             apiKey: "AIzaSyBjP-jQ9dXTmwSykS9LlpKgoYursC3Lafg",
             authDomain: "keyboard-defender.firebaseapp.com",
+            databaseURL: RTDB_URL,
             projectId: "keyboard-defender",
             storageBucket: "keyboard-defender.firebasestorage.app",
             messagingSenderId: "118432745789",
             appId: "1:118432745789:web:1fc9d9486e5fa7b429dd54"
         };
+        if (!firebaseConfig.databaseURL) firebaseConfig.databaseURL = RTDB_URL;
         
-        let app, db, auth, userId;
+        let app, db, rtdb = null, auth, userId;
         let isFirebaseReady = false;
+        let isRtdbAvailable = false;
+        let rtdbProbeDone = false;
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const el = document.getElementById('toastBanner');
+            if (!el) return;
+            el.innerText = msg;
+            el.classList.remove('hidden');
+            if (toastTimer) clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => el.classList.add('hidden'), 3200);
+        }
 
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
+            try {
+                rtdb = getDatabase(app, RTDB_URL);
+            } catch (rtdbErr) {
+                console.warn("RTDB init skipped:", rtdbErr);
+                rtdb = null;
+            }
             
             const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
             if (token) {
@@ -439,9 +486,19 @@
         const mapCtx = mapCanvas.getContext('2d');
         const hiddenInput = document.getElementById('hiddenInput');
 
+        // 合作模式統一各防區邏輯解析度，徹底解決不同電腦螢幕大小導致防區重疊或敵人超出畫面的問題
+        const COOP_ZONE_W = 1600;
+        const COOP_ZONE_H = 900;
+        let isCoopCanvasMode = false;
+
         function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
+            if (isCoopCanvasMode) {
+                canvas.width = COOP_ZONE_W;
+                canvas.height = COOP_ZONE_H;
+            } else {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+            }
         }
         window.addEventListener('resize', resize);
         resize();
@@ -1199,15 +1256,103 @@
             tacticalOpen: false, tacticalX: 0, tacticalY: 0,
             
             roomId: null, isHost: false, players: [], playerIndex: 0, playersData: {}, playersHp: {},
-            coopTotalSlow: 0
+            coopTotalSlow: 0, recentlyKilled: {},
+            coopSubMode: 'relay', // 'relay' (每人獨立防區) | 'shared' (同圖即時共鬥)
+            remotePlayers: {},
+            waveTransitioning: false
         };
         
+        const COOP_PLAYER_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#06b6d4', '#a855f7'];
         let unsubRoom = null;
         let unsubActions = null;
+        let rtdbUnsubs = [];
+        let rtdbHostTimer = null;
+        let rtdbCursorTimer = null;
+        let rtdbSessionStart = 0;
 
-        // --- 闖關進度儲存與讀取 (支援接關) ---
+        function cleanupRtdbSync() {
+            rtdbUnsubs.forEach(fn => { try { fn(); } catch(e){} });
+            rtdbUnsubs = [];
+            if (rtdbHostTimer) { clearTimeout(rtdbHostTimer); rtdbHostTimer = null; }
+            if (rtdbCursorTimer) { clearTimeout(rtdbCursorTimer); rtdbCursorTimer = null; }
+        }
+
+        function markRtdbUnavailable(reasonMsg) {
+            isRtdbAvailable = false;
+            rtdbProbeDone = true;
+            updateLobbyModeUI();
+            if (reasonMsg) showToast(reasonMsg);
+            if (state.mode === 'coop' && state.isHost && state.coopSubMode === 'shared' && state.roomId && !state.isPlaying) {
+                state.coopSubMode = 'relay';
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { coopSubMode: 'relay' }).catch(() => {});
+            }
+        }
+
+        async function probeRtdbAvailability() {
+            const banner = document.getElementById('rtdbQuotaBanner');
+            if (!rtdb || !isFirebaseReady || !userId) {
+                markRtdbUnavailable();
+                return false;
+            }
+            if (banner) {
+                banner.className = 'text-[11px] font-bold text-yellow-400';
+                banner.innerText = '⏳ 偵測即時資料庫額度中...';
+            }
+            try {
+                const probeRef = dbRef(rtdb, `coop_rtdb/_probe/${userId}`);
+                await Promise.race([
+                    dbSet(probeRef, { t: Date.now() }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('RTDB_TIMEOUT')), 2500))
+                ]);
+                dbRemove(probeRef).catch(() => {});
+                isRtdbAvailable = true;
+                rtdbProbeDone = true;
+                updateLobbyModeUI();
+                return true;
+            } catch (err) {
+                console.warn("RTDB probe unavailable (quota or rules):", err);
+                markRtdbUnavailable('⚠️ 即時資料庫免費額度已滿或無法連線，已鎖定為「接力防區模式」');
+                return false;
+            }
+        }
+
+        function updateLobbyModeUI() {
+            const btnRelay = document.getElementById('btnModeRelay');
+            const btnShared = document.getElementById('btnModeShared');
+            const banner = document.getElementById('rtdbQuotaBanner');
+            const hint = document.getElementById('lobbyModeHint');
+            if (!btnRelay || !btnShared) return;
+
+            if (hint) hint.innerText = state.isHost ? '(由您選擇模式)' : '(由房主選擇模式)';
+
+            if (banner) {
+                if (!rtdbProbeDone) {
+                    banner.className = 'text-[11px] font-bold text-yellow-400';
+                    banner.innerText = '⏳ 偵測即時連線中...';
+                } else if (isRtdbAvailable) {
+                    banner.className = 'text-[11px] font-bold text-emerald-400';
+                    banner.innerText = '✅ 即時共鬥額度正常';
+                } else {
+                    banner.className = 'text-[11px] font-bold text-rose-400';
+                    banner.innerText = '🔒 免費額度已滿/無法連線';
+                }
+            }
+
+            const isShared = state.coopSubMode === 'shared';
+            btnRelay.className = `p-3 rounded-xl border-2 text-left transition-all ${!isShared ? 'border-blue-400 bg-blue-600/25 shadow-[0_0_12px_rgba(59,130,246,0.35)]' : 'border-slate-700 bg-slate-800/60 opacity-75'} ${state.isHost ? 'cursor-pointer hover:border-blue-300' : 'cursor-default'}`;
+            btnRelay.disabled = !state.isHost;
+
+            const canClickShared = state.isHost && isRtdbAvailable;
+            btnShared.className = `p-3 rounded-xl border-2 text-left transition-all ${isShared ? 'border-emerald-400 bg-emerald-600/25 shadow-[0_0_12px_rgba(16,185,129,0.35)]' : 'border-slate-700 bg-slate-800/60'} ${!isRtdbAvailable ? 'opacity-45 cursor-not-allowed grayscale' : (canClickShared ? 'cursor-pointer hover:border-emerald-300' : 'opacity-80 cursor-default')}`;
+            btnShared.disabled = !canClickShared;
+        }
         function saveTutorialProgress(stage) {
-            try { localStorage.setItem('kd_tutorial_stage', String(stage)); } catch(e) {}
+            try {
+                let currentSaved = getSavedTutorialProgress();
+                if (stage > currentSaved && stage < TUTORIAL_WEAPONS.length) {
+                    localStorage.setItem('kd_tutorial_stage', String(stage));
+                }
+            } catch(e) {}
         }
         function getSavedTutorialProgress() {
             try {
@@ -1241,11 +1386,25 @@
         
         function getCameraX() {
             if (state.mode === 'single' || state.mode === 'tutorial') return 0;
+            if (state.coopSubMode === 'shared') return 0;
             return state.playerIndex * canvas.width;
         }
         function getGameWidth() {
             if (state.mode === 'single' || state.mode === 'tutorial') return canvas.width;
-            return canvas.width * state.players.length;
+            if (state.coopSubMode === 'shared') return canvas.width;
+            return canvas.width * Math.max(1, state.players.length);
+        }
+        function getCanvasMousePos(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = rect.width > 0 ? (canvas.width / rect.width) : 1;
+            const scaleY = rect.height > 0 ? (canvas.height / rect.height) : 1;
+            return {
+                x: (e.clientX - rect.left) * scaleX + getCameraX(),
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+        function getCoopRemainingCount() {
+            return Math.max(0, (state.waveTotal || 0) - (state.waveSpawned || 0)) + state.enemies.length;
         }
         
         // --- 特效與物件類別 ---
@@ -1275,9 +1434,10 @@
         }
 
         class Grenade {
-            constructor(sx, sy, tx, ty, type, dmg, r, stun) {
+            constructor(sx, sy, tx, ty, type, dmg, r, stun, visualOnly = false) {
                 this.x = sx; this.y = sy; this.tx = tx; this.ty = ty;
                 this.type = type; this.dmg = dmg; this.r = r; this.stun = stun;
+                this.visualOnly = visualOnly;
                 this.speed = 1200; 
                 this.life = 1;
                 
@@ -1305,6 +1465,7 @@
                 playSound('bomb');
                 createExplosion(this.x, this.y, this.color, this.type === 'ap' ? 30 : 50);
                 state.rings.push(new WaveRing(this.x, this.y, this.r, this.color));
+                if (this.visualOnly) return;
                 
                 if (this.type === 'ap' || this.type === 'frag') {
                     if (state.mode === 'coop') sendCoopAction('bomb', {x: this.x, y: this.y, r: this.r, dmg: this.dmg, push: 0});
@@ -1322,30 +1483,32 @@
         }
 
         class Bullet {
-            constructor(x, y, tx, ty, speed, dmg, pierce) {
+            constructor(x, y, tx, ty, speed, dmg, pierce, color = '#facc15', visualOnly = false) {
                 this.x = x; this.y = y;
                 const angle = Math.atan2(ty - y, tx - x);
                 this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
                 this.dmg = dmg; this.pierce = pierce; this.life = 2000; this.hitIds = new Set();
+                this.color = color; this.visualOnly = visualOnly;
             }
             update(dt) { this.x += this.vx * (dt/16); this.y += this.vy * (dt/16); this.life -= dt; }
             draw(ctx) {
-                ctx.fillStyle = '#facc15'; ctx.shadowColor = '#facc15'; ctx.shadowBlur = 5;
+                ctx.fillStyle = this.color; ctx.shadowColor = this.color; ctx.shadowBlur = 5;
                 ctx.beginPath(); ctx.arc(this.x, this.y, 4, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
             }
         }
 
         class BounceBullet {
-            constructor(x, y, tx, ty, speed, dmg, maxLife) {
+            constructor(x, y, tx, ty, speed, dmg, maxLife, visualOnly = false) {
                 this.x = x; this.y = y;
                 const angle = Math.atan2(ty - y, tx - x);
                 this.vx = Math.cos(angle) * speed; this.vy = Math.sin(angle) * speed;
                 this.dmg = dmg; this.life = maxLife; this.hitIds = new Map();
+                this.visualOnly = visualOnly;
             }
-            update(dt, gameWidth, gameHeight) {
+            update(dt, maxX, gameHeight, minX = 0) {
                 this.x += this.vx * (dt/1000); this.y += this.vy * (dt/1000); this.life -= dt;
-                if (this.x < 0) { this.x = 0; this.vx *= -1; }
-                if (this.x > gameWidth) { this.x = gameWidth; this.vx *= -1; }
+                if (this.x < minX) { this.x = minX; this.vx *= -1; }
+                if (this.x > maxX) { this.x = maxX; this.vx *= -1; }
                 if (this.y < 0) { this.y = 0; this.vy *= -1; }
                 if (this.y > gameHeight) { this.y = gameHeight; this.vy *= -1; }
             }
@@ -1358,10 +1521,11 @@
         }
 
         class WallSegment {
-            constructor(x1, y1, x2, y2, maxLife, dmg, stun) {
+            constructor(x1, y1, x2, y2, maxLife, dmg, stun, visualOnly = false) {
                 this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
                 this.life = maxLife; this.maxLife = maxLife; this.dmg = dmg; this.stun = stun;
                 this.hitIds = new Set();
+                this.visualOnly = visualOnly;
             }
             update(dt) { this.life -= dt; }
             draw(ctx) {
@@ -1373,13 +1537,14 @@
         }
 
         class VWeapon {
-            constructor(x, y, size, dmg, stun) {
+            constructor(x, y, size, dmg, stun, targetX = null, targetY = null, visualOnly = false) {
                 this.x = x; this.y = y; this.size = size; this.dmg = dmg; this.stun = stun;
+                this.targetX = targetX; this.targetY = targetY; this.visualOnly = visualOnly;
                 this.hitIds = new Set();
             }
             update(dt) {
-                let tx = state.towerX;
-                let ty = state.towerY;
+                let tx = this.targetX !== null ? this.targetX : state.towerX;
+                let ty = this.targetY !== null ? this.targetY : state.towerY;
                 const angle = Math.atan2(ty - this.y, tx - this.x);
                 this.x += Math.cos(angle) * 300 * (dt/1000);
                 this.y += Math.sin(angle) * 300 * (dt/1000);
@@ -1439,6 +1604,7 @@
                 this.id = id || Math.random().toString(36).substr(2, 9);
                 this.width = 35; this.height = 42; 
                 this.stunTime = 0; this.dotDmg = 0; this.dotTimer = 0; this.dotDuration = 0; this.lastShieldHit = 0;
+                this.isRushing = false;
                 
                 let lvl = state.mode === 'coop' ? state.wave : (state.mode === 'tutorial' ? (state.tutorialStage + 1) : state.level);
                 this.maxHp = lvl === 1 ? 1 : Math.floor(1.5 + lvl / 1.5);
@@ -1457,14 +1623,30 @@
                     let baseSpeed = 0.2 + Math.random() * 0.4 + (lvl * 0.03);
                     this.vx = Math.cos(angle) * baseSpeed;
                     this.vy = Math.sin(angle) * baseSpeed;
+                } else if (state.coopSubMode === 'shared') {
+                    // 同圖即時共鬥模式：敵人統一從畫面左側進攻，朝最右側共同主機推進
+                    let pCount = state.players ? Math.max(1, state.players.length) : 1;
+                    this.x = -40;
+                    this.currentZone = 0;
+                    this.y = 80 + Math.random() * (canvas.height - 160);
+                    if (pCount > 1) {
+                        this.maxHp = Math.max(1, Math.ceil(this.maxHp * (1 + (pCount - 1) * 0.35)));
+                        this.hp = this.maxHp;
+                        this.color = this.maxHp > 3 ? '#ef4444' : '#64748b';
+                    }
+                    let baseSpeed = 0.32 + Math.random() * 0.32 + (lvl * 0.05);
+                    this.vx = baseSpeed;
+                    this.vy = (Math.random() - 0.5) * baseSpeed * 0.8;
                 } else {
-                    let pCount = state.players ? state.players.length : 1;
-                    this.x = -50; 
+                    let pCount = state.players ? Math.max(1, state.players.length) : 1;
+                    this.x = -40; 
+                    this.currentZone = 0;
                     
-                    // 合作模式：精準分配數量，每 4 隻就有 1 隻 (絕對數量 25%) 會直接空降到其他玩家防區，其餘 3 隻 (絕對數量 75%) 從第一玩家開始
+                    // 合作接力模式：每 4 隻有 1 隻 (25%) 空降到後續防區的「左側入口 (+20)」，避免出現在前一防區最右邊
                     if (pCount > 1 && (state.waveSpawned % 4 === 3)) {
                         let spawnIndex = 1 + Math.floor(Math.random() * (pCount - 1));
-                        this.x = spawnIndex * canvas.width - 50;
+                        this.x = spawnIndex * canvas.width + 20;
+                        this.currentZone = spawnIndex;
                     }
                     
                     this.y = 100 + Math.random() * (canvas.height - 200);
@@ -1472,12 +1654,18 @@
                     let baseSpeed = 0.3 + Math.random() * 0.3 + (lvl * 0.05) + (pCount * 0.08);
                     this.vx = baseSpeed;
                     this.vy = (Math.random() - 0.5) * baseSpeed * 0.8;
-                    this.currentZone = Math.floor(Math.max(0, this.x) / canvas.width);
                 }
                 
                 this.serverX = this.x; this.serverY = this.y;
             }
             update(dt) {
+                let isEndgameRush = false;
+                if (state.mode === 'coop' && !state.placingTower) {
+                    let rem = getCoopRemainingCount();
+                    if (rem > 0 && rem <= 5) isEndgameRush = true;
+                }
+                this.isRushing = isEndgameRush;
+
                 if (state.mode === 'single' || state.mode === 'tutorial' || state.isHost) {
                     if (this.dotDmg > 0 && this.hp > 0) {
                         this.dotTimer -= dt/1000;
@@ -1496,26 +1684,33 @@
                         let speedMult = 1 - (slowFact * 0.1);
                         if (this.inAura) speedMult *= 0.4;
                         
-                        this.x += this.vx * Math.max(0.2, speedMult); 
-                        this.y += this.vy * Math.max(0.2, speedMult);
-                        
                         if (state.mode === 'coop') {
-                            if (this.y < 50) { this.y = 50; this.vy *= -1; }
-                            if (this.y > canvas.height - 50) { this.y = canvas.height - 50; this.vy *= -1; }
+                            // 確保合作模式敵人永遠向右推進，不會反向迷路
+                            this.vx = Math.max(0.35, Math.abs(this.vx));
+                            let rushMult = isEndgameRush ? 2.8 : 1.0;
+                            let stepX = this.vx * Math.max(0.25, speedMult) * rushMult;
+                            if (isEndgameRush) stepX = Math.max(2.2, stepX);
+                            this.x = Math.max(-45, this.x + stepX);
+                            this.y += this.vy * Math.max(0.25, speedMult) * (isEndgameRush ? 1.5 : 1.0);
+
+                            if (this.y < 60) { this.y = 60; this.vy = Math.abs(this.vy); }
+                            if (this.y > canvas.height - 60) { this.y = canvas.height - 60; this.vy = -Math.abs(this.vy); }
                             
                             // 判斷是否跨過邊界進入下一位玩家防區
-                            let newZone = Math.floor(this.x / canvas.width);
+                            let newZone = Math.floor(Math.max(0, this.x) / canvas.width);
                             if (newZone > this.currentZone && newZone < state.players.length) {
                                 this.currentZone = newZone;
-                                // 進入新地圖時，保留原高度，但重新計算更刁鑽的角度
                                 this.vy = (Math.random() - 0.5) * this.vx * 1.2;
                             }
+                        } else {
+                            this.x += this.vx * Math.max(0.2, speedMult); 
+                            this.y += this.vy * Math.max(0.2, speedMult);
                         }
                     }
                     this.serverX = this.x; this.serverY = this.y;
                 } else {
-                    this.x += (this.serverX - this.x) * 0.3;
-                    this.y += (this.serverY - this.y) * 0.3;
+                    this.x += (this.serverX - this.x) * 0.35;
+                    this.y += (this.serverY - this.y) * 0.35;
                     if (this.stunTime > 0) this.stunTime -= dt/1000;
                 }
             }
@@ -1534,20 +1729,22 @@
             draw(ctx) {
                 ctx.save(); ctx.translate(this.x, this.y);
                 if (this.stunTime > 0) { ctx.shadowColor = '#8b5cf6'; ctx.shadowBlur = 10; ctx.translate(0, Math.sin(Date.now()/200)*3); }
+                else if (this.isRushing) { ctx.shadowColor = '#f97316'; ctx.shadowBlur = 14; }
                 else if (this.dotDmg > 0) { ctx.shadowColor = '#f43f5e'; ctx.shadowBlur = 5; }
 
                 ctx.beginPath();
                 ctx.moveTo(-this.width/2, -this.height/2); ctx.lineTo(this.width/2 - 8, -this.height/2);
                 ctx.lineTo(this.width/2, -this.height/2 + 8); ctx.lineTo(this.width/2, this.height/2);
                 ctx.lineTo(-this.width/2, this.height/2); ctx.closePath();
-                ctx.fillStyle = this.color; ctx.fill(); ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = this.isRushing ? '#ea580c' : this.color; ctx.fill();
+                ctx.strokeStyle = this.isRushing ? '#fde047' : '#cbd5e1'; ctx.lineWidth = 2; ctx.stroke();
                 
                 if (this.hp < this.maxHp || this.maxHp > 2) {
                     ctx.fillStyle = '#000'; ctx.fillRect(-this.width/2, -this.height/2 - 10, this.width, 4);
                     ctx.fillStyle = '#10b981'; ctx.fillRect(-this.width/2, -this.height/2 - 10, this.width * Math.max(0, (this.hp / this.maxHp)), 4);
                 }
                 ctx.shadowBlur = 0; ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '8px sans-serif'; 
-                ctx.fillText('FILE', 0, 0); ctx.restore();
+                ctx.fillText(this.isRushing ? 'FAST' : 'FILE', 0, 0); ctx.restore();
             }
             contains(px, py) { return Math.abs(px - this.x) < this.width/2 && Math.abs(py - this.y) < this.height/2; }
         }
@@ -1572,17 +1769,21 @@
                 ctx.setLineDash([]);
                 
                 ctx.fillStyle = 'rgba(255,255,255,0.1)'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
-                ctx.fillText(`ZONE ${state.playerIndex + 1}`, camX + canvas.width/2, 40);
+                ctx.fillText(state.coopSubMode === 'shared' ? `⚡ CO-OP ARENA (同圖即時共鬥)` : `ZONE ${state.playerIndex + 1}`, camX + canvas.width/2, 40);
             }
         }
 
-        function drawSingleTower(tx, ty, color, isLocal) {
+        function drawSingleTower(tx, ty, color, isLocal, extraOpts = null) {
             if (isLocal && state.passives.aura > 0 && !state.placingTower) {
                 let r = 80 + (state.passives.aura * 40);
-                let ax = getCameraX() + canvas.width/2;
+                let ax = (state.mode === 'coop' && state.coopSubMode === 'shared') ? tx : (getCameraX() + canvas.width/2);
                 ctx.save(); ctx.beginPath(); ctx.arc(ax, ty, r, 0, Math.PI*2);
                 ctx.fillStyle = 'rgba(148, 163, 184, 0.08)'; ctx.fill(); ctx.strokeStyle = 'rgba(148, 163, 184, 0.3)'; ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
                 ctx.translate(ax, ty); ctx.rotate(Date.now() / 1000); ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+            } else if (!isLocal && extraOpts && extraOpts.aura > 0 && !state.placingTower) {
+                ctx.save(); ctx.beginPath(); ctx.arc(tx, ty, extraOpts.aura, 0, Math.PI*2);
+                ctx.fillStyle = 'rgba(148, 163, 184, 0.06)'; ctx.fill(); ctx.strokeStyle = 'rgba(148, 163, 184, 0.25)'; ctx.lineWidth = 1.5; ctx.setLineDash([8, 8]);
+                ctx.stroke(); ctx.restore();
             }
             
             if (isLocal && state.shield && state.shield.life > 0 && !state.placingTower) {
@@ -1590,6 +1791,11 @@
                 ctx.beginPath(); ctx.arc(tx, ty, state.shield.radius, 0, Math.PI * 2);
                 ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 4; ctx.shadowColor = '#818cf8'; ctx.shadowBlur = 15; ctx.stroke();
                 ctx.fillStyle = 'rgba(99, 102, 241, 0.15)'; ctx.fill(); ctx.restore();
+            } else if (!isLocal && extraOpts && extraOpts.shield > 0 && !state.placingTower) {
+                ctx.save(); ctx.globalAlpha = 0.75;
+                ctx.beginPath(); ctx.arc(tx, ty, extraOpts.shield, 0, Math.PI * 2);
+                ctx.strokeStyle = '#6366f1'; ctx.lineWidth = 3; ctx.shadowColor = '#818cf8'; ctx.shadowBlur = 12; ctx.stroke();
+                ctx.fillStyle = 'rgba(99, 102, 241, 0.12)'; ctx.fill(); ctx.restore();
             }
 
             ctx.save(); ctx.translate(tx, ty);
@@ -1599,142 +1805,628 @@
             ctx.fillStyle = '#0f172a'; ctx.fillRect(-20, -20, 40, 30); ctx.strokeRect(-20, -20, 40, 30);
             ctx.fillStyle = color; ctx.shadowBlur = 5;
             const h = 8 + Math.sin(Date.now() / 100) * 8; ctx.fillRect(-12, 0 - h/2, 24, h);
+
+            if (extraOpts && extraOpts.label) {
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(-36, -64, 72, 18, 9);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(extraOpts.label, 0, -55);
+            }
             ctx.restore();
+        }
+
+        function drawSharedTeammates(isPlacingPhase = false) {
+            if (state.mode !== 'coop' || state.coopSubMode !== 'shared') return;
+            state.players.forEach((uid, idx) => {
+                if (uid === userId) return;
+                const pColor = COOP_PLAYER_COLORS[idx % COOP_PLAYER_COLORS.length];
+                const rp = state.remotePlayers[uid];
+                const pData = state.playersData ? state.playersData[uid] : null;
+                const pHp = (state.playersHp && state.playersHp[uid] !== undefined)
+                    ? state.playersHp[uid]
+                    : (pData && pData.hp !== undefined ? pData.hp : 3);
+                if (pHp <= 0) return;
+
+                let targetTx = (rp && rp.tx !== undefined) ? rp.tx : (pData && pData.towerX !== undefined ? pData.towerX : canvas.width / 2);
+                let targetTy = (rp && rp.ty !== undefined) ? rp.ty : (pData && pData.towerY !== undefined ? pData.towerY : canvas.height / 2);
+                let targetMx = (rp && rp.x !== undefined) ? rp.x : targetTx;
+                let targetMy = (rp && rp.y !== undefined) ? rp.y : targetTy;
+
+                if (rp) {
+                    rp.renderX = rp.renderX !== undefined ? rp.renderX + (targetMx - rp.renderX) * 0.35 : targetMx;
+                    rp.renderY = rp.renderY !== undefined ? rp.renderY + (targetMy - rp.renderY) * 0.35 : targetMy;
+                    rp.renderTx = rp.renderTx !== undefined ? rp.renderTx + (targetTx - rp.renderTx) * 0.35 : targetTx;
+                    rp.renderTy = rp.renderTy !== undefined ? rp.renderTy + (targetTy - rp.renderTy) * 0.35 : targetTy;
+                    targetMx = rp.renderX; targetMy = rp.renderY;
+                    targetTx = rp.renderTx; targetTy = rp.renderTy;
+                }
+
+                const isPlaced = (rp && rp.placed) || (pData && pData.towerX !== undefined) || !isPlacingPhase;
+                const tagLabel = `P${idx + 1} ${'♥'.repeat(Math.max(0, pHp))}`;
+
+                if (isPlacingPhase && !isPlaced) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.45;
+                    drawSingleTower(targetMx, targetMy, pColor, false, { label: `P${idx + 1} 選位中` });
+                    ctx.restore();
+                } else {
+                    drawSingleTower(targetTx, targetTy, pColor, false, {
+                        label: tagLabel,
+                        shield: rp ? rp.shield : 0,
+                        aura: rp ? rp.aura : 0
+                    });
+                }
+
+                // 即時繪製隊友的雷射光劍、拖曳瞄準線與準星游標
+                if (!isPlacingPhase && rp) {
+                    if (rp.laser > 0) {
+                        const angle = Math.atan2(targetMy - targetTy, targetMx - targetTx);
+                        const dist = Math.min(Math.hypot(targetMx - targetTx, targetMy - targetTy), 300);
+                        const ex = targetTx + Math.cos(angle) * dist;
+                        const ey = targetTy + Math.sin(angle) * dist;
+                        ctx.save();
+                        ctx.strokeStyle = pColor;
+                        ctx.globalAlpha = 0.55;
+                        ctx.lineWidth = rp.laser;
+                        ctx.shadowColor = pColor;
+                        ctx.shadowBlur = 12;
+                        ctx.beginPath(); ctx.moveTo(targetTx, targetTy); ctx.lineTo(ex, ey); ctx.stroke();
+                        ctx.restore();
+                    }
+                    if (rp.drag && Array.isArray(rp.drag) && rp.drag.length === 2) {
+                        ctx.save();
+                        ctx.strokeStyle = '#f97316';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([5, 5]);
+                        ctx.beginPath(); ctx.moveTo(rp.drag[0], rp.drag[1]); ctx.lineTo(targetMx, targetMy); ctx.stroke();
+                        ctx.setLineDash([]);
+                        ctx.restore();
+                    }
+                    ctx.save();
+                    ctx.translate(targetMx, targetMy);
+                    ctx.strokeStyle = pColor;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.moveTo(0, -12); ctx.lineTo(0, 12); ctx.stroke();
+                    ctx.fillStyle = pColor;
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText(`P${idx + 1}`, 10, -8);
+                    ctx.restore();
+                }
+            });
         }
 
         function drawTower() {
             if (state.mode === 'single' || state.mode === 'tutorial') {
                 drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
+            } else if (state.coopSubMode === 'shared') {
+                drawSharedTeammates(false);
+                if (!state.isDead && (state.placingTower ? state.towerPlaced : true)) {
+                    const myColor = COOP_PLAYER_COLORS[state.playerIndex % COOP_PLAYER_COLORS.length];
+                    drawSingleTower(state.towerX, state.towerY, myColor, true, { label: `★P${state.playerIndex + 1} (你)` });
+                }
             } else {
-                // Local Tower
+                // 接力防區模式：每位玩家獨立管理自己的防區畫面，只顯示自身防禦塔（隊友位置標示於上方總地圖）
                 if (!state.isDead && (state.placingTower ? state.towerPlaced : true)) {
                     drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
-                }
-                
-                // Other Players' Towers
-                if (!state.placingTower) {
-                    state.players.forEach(uid => {
-                        if (uid !== userId) {
-                            let p = state.playersData[uid];
-                            if (p && p.hp > 0 && p.towerX !== undefined) {
-                                if (p.towerX > getCameraX() - 100 && p.towerX < getCameraX() + canvas.width + 100) {
-                                    drawSingleTower(p.towerX, p.towerY, '#10b981', false);
-                                }
-                            }
-                        }
-                    });
                 }
             }
         }
         
         function drawMinimap() {
             if (state.mode !== 'coop') return;
-            mapCtx.clearRect(0, 0, 300, 30);
-            const pCount = state.players.length;
-            const w = 300 / pCount;
-            
-            for(let i=0; i<pCount; i++) {
-                mapCtx.fillStyle = i === state.playerIndex ? 'rgba(59, 130, 246, 0.3)' : 'rgba(30, 41, 59, 0.8)';
-                mapCtx.fillRect(i*w, 0, w, 30);
-                mapCtx.strokeStyle = '#475569'; mapCtx.strokeRect(i*w, 0, w, 30);
+            const mw = mapCanvas.width;
+            const mh = mapCanvas.height;
+            mapCtx.clearRect(0, 0, mw, mh);
+
+            const pCount = Math.max(1, state.players.length);
+            const serverW = 12;
+            const playW = mw - serverW;
+            const totalW = Math.max(1, getGameWidth());
+
+            // 1. 繪製底圖 (區分「同圖共鬥」或「接力防區」)
+            if (state.coopSubMode === 'shared') {
+                mapCtx.fillStyle = 'rgba(16, 185, 129, 0.16)';
+                mapCtx.fillRect(0, 0, playW, mh);
+                mapCtx.strokeStyle = '#34d399';
+                mapCtx.lineWidth = 1.5;
+                mapCtx.strokeRect(0.5, 0.5, playW - 1, mh - 1);
+                mapCtx.fillStyle = '#6ee7b7';
+                mapCtx.font = 'bold 10px sans-serif';
+                mapCtx.textAlign = 'left';
+                mapCtx.textBaseline = 'top';
+                mapCtx.fillText(`⚡ 同圖即時共鬥戰場 (${pCount}人聯合作戰)`, 6, 3);
+            } else {
+                const zoneW = playW / pCount;
+                for (let i = 0; i < pCount; i++) {
+                    const zx = i * zoneW;
+                    const isMine = (i === state.playerIndex);
+                    mapCtx.fillStyle = isMine ? 'rgba(37, 99, 235, 0.32)' : 'rgba(30, 41, 59, 0.85)';
+                    mapCtx.fillRect(zx, 0, zoneW, mh);
+                    mapCtx.strokeStyle = isMine ? '#60a5fa' : '#475569';
+                    mapCtx.lineWidth = isMine ? 2 : 1;
+                    mapCtx.strokeRect(zx + 0.5, 0.5, zoneW - 1, mh - 1);
+
+                    mapCtx.fillStyle = isMine ? '#93c5fd' : '#94a3b8';
+                    mapCtx.font = 'bold 10px sans-serif';
+                    mapCtx.textAlign = 'left';
+                    mapCtx.textBaseline = 'top';
+                    mapCtx.fillText(isMine ? `★你(P${i + 1})` : `P${i + 1}`, zx + 4, 3);
+                }
             }
-            
-            const totalW = getGameWidth();
-            mapCtx.fillStyle = '#ef4444';
+
+            // 2. 計算並繪製敵方前進總進度條與最前線指標
+            let maxEnemyX = 0;
+            state.enemies.forEach(e => { if (e.x > maxEnemyX) maxEnemyX = e.x; });
+            const hasEnemies = state.enemies.length > 0;
+            const progressRatio = hasEnemies ? Math.max(0, Math.min(1, maxEnemyX / totalW)) : 0;
+
+            // 底部進度槽
+            mapCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+            mapCtx.fillRect(0, mh - 7, playW, 7);
+            if (hasEnemies && progressRatio > 0) {
+                const frontX = progressRatio * playW;
+                const grad = mapCtx.createLinearGradient(0, 0, frontX, 0);
+                grad.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
+                grad.addColorStop(1, 'rgba(249, 115, 22, 0.95)');
+                mapCtx.fillStyle = grad;
+                mapCtx.fillRect(0, mh - 6, frontX, 6);
+
+                // 最前線警示線
+                mapCtx.strokeStyle = '#fbbf24';
+                mapCtx.lineWidth = 1.5;
+                mapCtx.beginPath();
+                mapCtx.moveTo(frontX, 0);
+                mapCtx.lineTo(frontX, mh);
+                mapCtx.stroke();
+            }
+
+            // 3. 繪製敵方紅點分佈
+            const remCount = getCoopRemainingCount();
+            const isRushing = !state.placingTower && remCount > 0 && remCount <= 5;
             state.enemies.forEach(e => {
-                let mx = (e.x / totalW) * 300;
-                mapCtx.fillRect(mx - 2, 13, 4, 4);
+                if (e.x < 0) return;
+                const mx = Math.max(2, Math.min(playW - 2, (e.x / totalW) * playW));
+                const my = Math.max(14, Math.min(mh - 10, 14 + (e.y / canvas.height) * (mh - 24)));
+                mapCtx.fillStyle = isRushing ? '#fb923c' : '#ef4444';
+                mapCtx.beginPath();
+                mapCtx.arc(mx, my, isRushing ? 3 : 2.2, 0, Math.PI * 2);
+                mapCtx.fill();
             });
-            
-            if (!state.placingTower || state.towerPlaced) {
-                state.players.forEach(uid => {
-                    let p = state.playersData[uid];
-                    let tx = -1;
-                    if (uid === userId && state.towerPlaced && !state.isDead) tx = state.towerX;
-                    else if (p && p.towerX !== undefined && p.hp > 0) tx = p.towerX;
-                    
-                    if (tx !== -1) {
-                        let mapTx = (tx / totalW) * 300;
-                        mapCtx.fillStyle = uid === userId ? '#3b82f6' : '#10b981';
-                        mapCtx.fillRect(mapTx - 3, 0, 6, 30);
+
+            // 4. 標出所有玩家在總地圖上的精準位置
+            state.players.forEach((uid, idx) => {
+                const p = state.playersData ? state.playersData[uid] : null;
+                const rp = state.remotePlayers ? state.remotePlayers[uid] : null;
+                const isMe = (uid === userId);
+                let tx = state.coopSubMode === 'shared' ? canvas.width / 2 : (idx + 0.5) * canvas.width;
+                let ty = canvas.height / 2;
+                let placed = false;
+                let alive = true;
+
+                if (isMe) {
+                    alive = !state.isDead && state.hp > 0;
+                    if (state.towerPlaced || !state.placingTower) {
+                        tx = state.towerX; ty = state.towerY; placed = true;
                     }
-                });
-                
-                // Draw Main Server
-                mapCtx.fillStyle = '#facc15';
-                mapCtx.fillRect(295, 0, 5, 30);
+                } else {
+                    const pHp = (state.playersHp && state.playersHp[uid] !== undefined) ? state.playersHp[uid] : (p && p.hp !== undefined ? p.hp : 3);
+                    alive = pHp > 0;
+                    if (rp && rp.tx !== undefined && (rp.placed || !state.placingTower)) {
+                        tx = rp.tx; ty = rp.ty; placed = true;
+                    } else if (p && p.towerX !== undefined && p.towerY !== undefined) {
+                        tx = p.towerX; ty = p.towerY; placed = true;
+                    }
+                }
+
+                const mapTx = Math.max(5, Math.min(playW - 5, (tx / totalW) * playW));
+                const mapTy = Math.max(16, Math.min(mh - 11, 14 + (ty / canvas.height) * (mh - 24)));
+                const dotColor = state.coopSubMode === 'shared'
+                    ? COOP_PLAYER_COLORS[idx % COOP_PLAYER_COLORS.length]
+                    : (isMe ? '#38bdf8' : '#10b981');
+
+                mapCtx.save();
+                if (!alive) {
+                    mapCtx.strokeStyle = '#94a3b8';
+                    mapCtx.lineWidth = 2;
+                    mapCtx.beginPath();
+                    mapCtx.moveTo(mapTx - 4, mapTy - 4); mapCtx.lineTo(mapTx + 4, mapTy + 4);
+                    mapCtx.moveTo(mapTx + 4, mapTy - 4); mapCtx.lineTo(mapTx - 4, mapTy + 4);
+                    mapCtx.stroke();
+                } else {
+                    mapCtx.globalAlpha = placed ? 1.0 : 0.45;
+                    mapCtx.fillStyle = dotColor;
+                    mapCtx.strokeStyle = '#ffffff';
+                    mapCtx.lineWidth = 1.5;
+                    mapCtx.beginPath();
+                    mapCtx.arc(mapTx, mapTy, isMe ? 5 : 4, 0, Math.PI * 2);
+                    mapCtx.fill();
+                    mapCtx.stroke();
+                }
+                mapCtx.restore();
+            });
+
+            // 5. 繪製最右側主機位置
+            mapCtx.fillStyle = '#facc15';
+            mapCtx.fillRect(playW, 0, serverW, mh);
+            mapCtx.fillStyle = '#0f172a';
+            mapCtx.font = 'bold 9px sans-serif';
+            mapCtx.textAlign = 'center';
+            mapCtx.textBaseline = 'middle';
+            mapCtx.fillText('主', playW + serverW / 2, mh / 2 - 5);
+            mapCtx.fillText('機', playW + serverW / 2, mh / 2 + 6);
+
+            // 6. 更新上方文字資訊
+            const zoneInfoEl = document.getElementById('minimapZoneInfo');
+            const progInfoEl = document.getElementById('minimapProgressInfo');
+            if (zoneInfoEl) {
+                zoneInfoEl.innerText = state.coopSubMode === 'shared'
+                    ? `⚡ 同圖共鬥：你是 P${state.playerIndex + 1} (共 ${pCount} 人)`
+                    : `📍 你在第 ${state.playerIndex + 1} 防區 (共 ${pCount} 區)`;
+            }
+            if (progInfoEl) {
+                if (state.placingTower) {
+                    progInfoEl.className = 'text-sky-300';
+                    progInfoEl.innerText = '🛠️ 請點擊畫面佈署防禦塔';
+                } else {
+                    const pct = Math.round(progressRatio * 100);
+                    const frontZone = hasEnemies ? Math.min(pCount, Math.floor(Math.max(0, maxEnemyX) / canvas.width) + 1) : '-';
+                    const frontText = state.coopSubMode === 'shared' ? `推進 ${pct}%` : `第${frontZone}區 (${pct}%)`;
+                    if (isRushing) {
+                        progInfoEl.className = 'text-orange-400 animate-pulse';
+                        progInfoEl.innerText = `⚡ 殘敵加速 (${remCount}隻)｜前線: ${frontText}`;
+                    } else if (hasEnemies) {
+                        progInfoEl.className = 'text-amber-300';
+                        progInfoEl.innerText = `👾 剩餘 ${remCount} 隻｜最前線: ${frontText}`;
+                    } else {
+                        progInfoEl.className = 'text-emerald-300';
+                        progInfoEl.innerText = `👾 剩餘 ${remCount} 隻`;
+                    }
+                }
             }
         }
 
-        // ==================== 合作模式網路邏輯 ====================
+        // ==================== 合作模式網路邏輯 (支援 Firestore 接力 & RTDB 同圖即時共鬥) ====================
+        function applyCoopAction(action) {
+            if (!action || !action.data) return;
+            if (action.type === 'damage') {
+                let en = state.enemies.find(e => e.id === action.data.id);
+                if (en) en.takeDamage(action.data.dmg);
+            } else if (action.type === 'sleep') {
+                state.enemies.slice().forEach(e => {
+                    if (e.x >= action.data.minX - 50 && e.x <= action.data.maxX + 50) {
+                        e.stunTime = Math.max(e.stunTime, action.data.duration);
+                        e.takeDamage(Math.max(1, e.maxHp * 0.5));
+                    }
+                });
+            } else if (action.type === 'refresh') {
+                const minX = action.data.minX !== undefined ? action.data.minX : 0;
+                const maxX = action.data.maxX !== undefined ? action.data.maxX : getGameWidth();
+                state.enemies.slice().forEach(e => {
+                    if (e.x >= minX && e.x <= maxX) {
+                        let zStart = Math.floor(Math.max(0, e.x) / canvas.width) * canvas.width;
+                        e.x = Math.max(zStart + 15, e.x - action.data.push);
+                        e.takeDamage(action.data.dmg);
+                        if (action.data.stun > 0) e.stunTime = Math.max(e.stunTime, action.data.stun);
+                    }
+                });
+            } else if (action.type === 'bomb' || action.type === 'scroll') {
+                state.enemies.slice().forEach(en => {
+                    if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
+                        en.takeDamage(action.data.dmg);
+                        if (action.data.push > 0) {
+                            let zStart = Math.floor(Math.max(0, en.x) / canvas.width) * canvas.width;
+                            let angle = Math.atan2(en.y - action.data.y, en.x - action.data.x);
+                            en.x = Math.max(zStart + 15, en.x + Math.cos(angle) * action.data.push);
+                            en.y = Math.max(60, Math.min(canvas.height - 60, en.y + Math.sin(angle) * action.data.push));
+                        }
+                    }
+                });
+            } else if (action.type === 'enter') {
+                state.enemies.slice().forEach(en => {
+                    if (distPointToSegment(en.x, en.y, action.data.tx, action.data.ty, action.data.mx, action.data.my) < action.data.w + (en.width || 35)/2) {
+                        en.takeDamage(action.data.dmg);
+                        if (action.data.stun > 0) en.stunTime = Math.max(en.stunTime, action.data.stun);
+                    }
+                });
+            } else if (action.type === 'aoe_stun') {
+                state.enemies.slice().forEach(en => {
+                    if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
+                        en.stunTime = Math.max(en.stunTime, action.data.stun);
+                    }
+                });
+            } else if (action.type === 'heal_tower') {
+                let uid = action.data.uid;
+                if (state.playersHp && state.playersHp[uid] !== undefined && state.playersHp[uid] > 0) {
+                    state.playersHp[uid] = Math.min(3, state.playersHp[uid] + action.data.amt);
+                    if (uid === userId) {
+                        state.hp = state.playersHp[uid];
+                        updateUI();
+                    }
+                }
+            }
+        }
+
         function sendCoopAction(type, data) {
             if (!isFirebaseReady || !state.roomId) return;
+            if (state.coopSubMode === 'shared' && isRtdbAvailable && rtdb) {
+                if (state.isHost) {
+                    applyCoopAction({ type, data });
+                } else {
+                    dbPush(dbRef(rtdb, `coop_rtdb/rooms/${state.roomId}/actions`), {
+                        type, data, t: Date.now()
+                    }).catch(console.warn);
+                }
+                return;
+            }
             addDoc(collection(db, 'artifacts', appId, 'public', 'data', `room_${state.roomId}_actions`), {
                 type, data, timestamp: serverTimestamp()
             }).catch(console.error);
         }
 
+        function sendSharedFx(fxType, payload = {}) {
+            if (state.mode !== 'coop' || state.coopSubMode !== 'shared' || !isRtdbAvailable || !rtdb || !state.roomId) return;
+            const fxListRef = dbRef(rtdb, `coop_rtdb/rooms/${state.roomId}/fx`);
+            const newRef = dbPush(fxListRef);
+            dbSet(newRef, {
+                uid: userId,
+                pIdx: state.playerIndex,
+                fxType,
+                ...payload,
+                t: Date.now()
+            }).then(() => {
+                setTimeout(() => { dbRemove(newRef).catch(() => {}); }, 1800);
+            }).catch(() => {});
+        }
+
+        function renderIncomingSharedFx(ev) {
+            if (!ev || ev.uid === userId) return;
+            const pColor = COOP_PLAYER_COLORS[(ev.pIdx || 0) % COOP_PLAYER_COLORS.length];
+            if (ev.fxType === 'mg') {
+                const scatter = ev.scatter || 1;
+                for (let s = 0; s < scatter; s++) {
+                    const offset = (s - Math.floor(scatter / 2)) * 30;
+                    state.bullets.push(new Bullet(ev.sx, ev.sy, ev.tx + offset, ev.ty + offset, 15, 0, ev.pierce || 0, pColor, true));
+                }
+                playSound('shoot');
+            } else if (ev.fxType === 'bounce') {
+                state.bounceBullets.push(new BounceBullet(ev.sx, ev.sy, ev.tx, ev.ty, 500, 0, ev.life || 4000, true));
+                playSound('shoot');
+            } else if (ev.fxType === 'wall') {
+                state.walls.push(new WallSegment(ev.x1, ev.y1, ev.x2, ev.y2, ev.life || 3000, 0, 0, true));
+            } else if (ev.fxType === 'bomb') {
+                createExplosion(ev.x, ev.y, '#f97316', 35);
+                state.rings.push(new WaveRing(ev.x, ev.y, ev.r || 100, '#f97316'));
+                playSound('bomb');
+            } else if (ev.fxType === 'grenade') {
+                state.grenades.push(new Grenade(ev.sx, ev.sy, ev.tx, ev.ty, ev.gType || 'frag', 0, ev.r || 200, 0, true));
+                playSound('shoot');
+            } else if (ev.fxType === 'scroll') {
+                state.rings.push(new WaveRing(ev.x, ev.y, ev.r || 140, '#0ea5e9'));
+                createExplosion(ev.x, ev.y, '#0ea5e9', 25);
+                playSound('wave');
+            } else if (ev.fxType === 'ctrlx') {
+                const w = ev.w || 250, h = ev.h || 250;
+                state.beams.push(new Beam(ev.x - w/2, ev.y - h/2, ev.x + w/2, ev.y + h/2, 12, '#f43f5e'));
+                state.beams.push(new Beam(ev.x - w/2, ev.y + h/2, ev.x + w/2, ev.y - h/2, 12, '#f43f5e'));
+                playSound('laser');
+            } else if (ev.fxType === 'ctrlv') {
+                state.vweapons.push(new VWeapon(ev.x, ev.y, ev.size || 200, 0, false, ev.tx, ev.ty, true));
+                playSound('laser');
+            } else if (ev.fxType === 'enter') {
+                state.beams.push(new Beam(ev.sx, ev.sy, ev.ex, ev.ey, ev.w || 60, '#f59e0b'));
+                playSound('laser');
+            } else if (ev.fxType === 'del') {
+                createExplosion(ev.tx, ev.ty, '#ef4444', 25);
+                state.beams.push(new Beam(ev.sx, ev.sy, ev.tx, ev.ty, 4, '#ef4444'));
+                playSound('destroy');
+            } else if (ev.fxType === 'space') {
+                createExplosion(canvas.width / 2, canvas.height / 2, '#8b5cf6', 60);
+                state.rings.push(new WaveRing(ev.x || canvas.width / 2, ev.y || canvas.height / 2, 450, '#8b5cf6'));
+                playSound('wave');
+            } else if (ev.fxType === 'at') {
+                createExplosion(ev.x, ev.y, '#22c55e', 45);
+                state.rings.push(new WaveRing(ev.x, ev.y, 400, '#22c55e'));
+                playSound('wave');
+            } else if (ev.fxType === 'typing') {
+                createExplosion(ev.x, ev.y, '#a855f7', 30);
+                state.rings.push(new WaveRing(ev.x, ev.y, ev.r || 200, '#a855f7'));
+                playSound('destroy');
+            }
+        }
+
+        function startSharedRtdbSync() {
+            cleanupRtdbSync();
+            if (!rtdb || !isRtdbAvailable || !state.roomId) return;
+            rtdbSessionStart = Date.now();
+            state.remotePlayers = {};
+
+            const roomPath = `coop_rtdb/rooms/${state.roomId}`;
+            const myCursorRef = dbRef(rtdb, `${roomPath}/cursors/${userId}`);
+            try { onDisconnect(myCursorRef).remove(); } catch(e){}
+            if (state.isHost) {
+                try { onDisconnect(dbRef(rtdb, roomPath)).remove(); } catch(e){}
+            }
+
+            // 1. 訂閱所有隊友游標、防禦塔與持續型技能狀態
+            const unsubCursors = onValue(dbRef(rtdb, `${roomPath}/cursors`), (snap) => {
+                const val = snap.val() || {};
+                Object.keys(val).forEach(uid => {
+                    if (uid === userId) return;
+                    const prev = state.remotePlayers[uid] || {};
+                    state.remotePlayers[uid] = {
+                        ...val[uid],
+                        renderX: prev.renderX !== undefined ? prev.renderX : val[uid].x,
+                        renderY: prev.renderY !== undefined ? prev.renderY : val[uid].y,
+                        renderTx: prev.renderTx !== undefined ? prev.renderTx : val[uid].tx,
+                        renderTy: prev.renderTy !== undefined ? prev.renderTy : val[uid].ty
+                    };
+                });
+                Object.keys(state.remotePlayers).forEach(uid => {
+                    if (!val[uid]) delete state.remotePlayers[uid];
+                });
+            });
+            rtdbUnsubs.push(unsubCursors);
+
+            // 2. 訂閱隊友即時發招特效
+            const unsubFx = onChildAdded(dbRef(rtdb, `${roomPath}/fx`), (snap) => {
+                const ev = snap.val();
+                if (ev && ev.t >= rtdbSessionStart - 2000) {
+                    renderIncomingSharedFx(ev);
+                }
+            });
+            rtdbUnsubs.push(unsubFx);
+
+            // 3. 房主接收動作並高速廣播戰場狀態；隊友即時接收戰場狀態
+            if (state.isHost) {
+                const unsubAct = onChildAdded(dbRef(rtdb, `${roomPath}/actions`), (snap) => {
+                    const act = snap.val();
+                    if (act) applyCoopAction(act);
+                    dbRemove(snap.ref).catch(() => {});
+                });
+                rtdbUnsubs.push(unsubAct);
+
+                const sharedHostLoop = () => {
+                    if (!state.isPlaying || !state.isHost || state.coopSubMode !== 'shared') return;
+                    const serialized = JSON.stringify(state.enemies.map(e => [e.id, Math.round(e.x), Math.round(e.y), Math.round(e.hp), e.maxHp, e.stunTime > 0 ? 1 : 0]));
+                    dbSet(dbRef(rtdb, `${roomPath}/state`), {
+                        e: serialized,
+                        mHp: state.mainHp,
+                        pHp: state.playersHp,
+                        sc: state.score,
+                        w: state.wave,
+                        ws: state.waveSpawned,
+                        wt: state.waveTotal,
+                        t: Date.now()
+                    }).catch(() => {});
+
+                    if (state.waveSpawned >= state.waveTotal && state.enemies.length === 0 && !state.placingTower && !state.isPaused && !state.waveTransitioning) {
+                        state.waveTransitioning = true;
+                        updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
+                            status: 'upgrading',
+                            mainHp: state.mainHp,
+                            playersHp: state.playersHp,
+                            wave: state.wave
+                        }).catch(console.error);
+                    }
+                    rtdbHostTimer = setTimeout(sharedHostLoop, 75);
+                };
+                sharedHostLoop();
+            } else {
+                const unsubState = onValue(dbRef(rtdb, `${roomPath}/state`), (snap) => {
+                    if (!state.isPlaying || state.isHost || state.coopSubMode !== 'shared') return;
+                    const sData = snap.val();
+                    if (!sData) return;
+
+                    if (sData.ws !== undefined) state.waveSpawned = sData.ws;
+                    if (sData.wt !== undefined) state.waveTotal = sData.wt;
+                    if (sData.sc !== undefined && sData.sc > state.score) state.score = sData.sc;
+
+                    if (sData.mHp !== undefined && state.mainHp !== sData.mHp) {
+                        if (sData.mHp < state.mainHp) {
+                            playSound('hurt');
+                            createExplosion(getGameWidth() - 40, canvas.height / 2, '#facc15', 50);
+                        }
+                        state.mainHp = sData.mHp;
+                        updateUI();
+                    }
+
+                    if (sData.pHp) {
+                        state.playersHp = sData.pHp;
+                        const myHp = sData.pHp[userId];
+                        if (myHp !== undefined && state.hp !== myHp) {
+                            if (myHp < state.hp) {
+                                playSound('hurt');
+                                document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 300);
+                                createExplosion(state.towerX, state.towerY, '#f43f5e', 30);
+                            }
+                            state.hp = myHp;
+                            updateUI();
+                            if (state.hp <= 0) state.isDead = true;
+                        }
+                        Object.keys(sData.pHp).forEach(uid => {
+                            if (state.playersData[uid]) state.playersData[uid].hp = sData.pHp[uid];
+                        });
+                    }
+
+                    if (sData.e) {
+                        try {
+                            const nowTs = performance.now();
+                            Object.keys(state.recentlyKilled).forEach(kid => {
+                                if (nowTs - state.recentlyKilled[kid] > 1500) delete state.recentlyKilled[kid];
+                            });
+                            const parsed = JSON.parse(sData.e);
+                            const newEnemies = [];
+                            parsed.forEach(eArr => {
+                                if (state.recentlyKilled[eArr[0]]) return;
+                                let en = state.enemies.find(ex => ex.id === eArr[0]);
+                                if (!en) {
+                                    en = new Enemy(eArr[0]);
+                                    en.x = eArr[1]; en.y = eArr[2];
+                                }
+                                en.serverX = eArr[1]; en.serverY = eArr[2];
+                                en.hp = eArr[3]; en.maxHp = eArr[4]; en.stunTime = eArr[5] > 0 ? 1 : 0;
+                                newEnemies.push(en);
+                            });
+                            state.enemies = newEnemies;
+                        } catch(e) {}
+                    }
+                });
+                rtdbUnsubs.push(unsubState);
+            }
+
+            // 4. 定期上傳自身游標與狀態 (~12.5 Hz 低流量高流暢)
+            const cursorSyncLoop = () => {
+                if (!state.isPlaying || state.coopSubMode !== 'shared') return;
+                const canLaser = !state.placingTower && !state.isDead && !state.isPaused && state.unlockedWeapons.includes('laser');
+                dbSet(myCursorRef, {
+                    x: Math.round(state.mouseX),
+                    y: Math.round(state.mouseY),
+                    tx: Math.round(state.towerX),
+                    ty: Math.round(state.towerY),
+                    placed: state.towerPlaced ? 1 : 0,
+                    laser: canLaser ? (4 + getWeaponUpgLevel('laser', 'laser_width') * 3) : 0,
+                    drag: (!state.isDead && state.isDragging && state.unlockedWeapons.includes('bomb'))
+                        ? [Math.round(state.dragStartX), Math.round(state.dragStartY)]
+                        : null,
+                    shield: (!state.isDead && state.shield && state.shield.life > 0) ? Math.round(state.shield.radius) : 0,
+                    aura: (!state.isDead && state.passives.aura > 0) ? (80 + state.passives.aura * 40) : 0,
+                    t: Date.now()
+                }).catch(() => {});
+                rtdbCursorTimer = setTimeout(cursorSyncLoop, 80);
+            };
+            cursorSyncLoop();
+        }
+
         async function processHostActions() {
-            if (!state.isHost) return;
+            if (!state.isHost || state.coopSubMode === 'shared') return;
             const snaps = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', `room_${state.roomId}_actions`));
             snaps.forEach(docSnap => {
-                const action = docSnap.data();
-                if (action.type === 'damage') {
-                    let en = state.enemies.find(e => e.id === action.data.id);
-                    if (en) en.takeDamage(action.data.dmg);
-                } else if (action.type === 'sleep') {
-                    state.enemies.forEach(e => {
-                        if (e.x >= action.data.minX - 100 && e.x <= action.data.maxX + 100) {
-                            e.stunTime = Math.max(e.stunTime, action.data.duration);
-                            e.takeDamage(Math.max(1, e.maxHp * 0.5));
-                        }
-                    });
-                } else if (action.type === 'refresh') {
-                    state.enemies.forEach(e => {
-                        e.x = Math.max(0, e.x - action.data.push); e.takeDamage(action.data.dmg);
-                        if (action.data.stun > 0) e.stunTime = Math.max(e.stunTime, action.data.stun);
-                    });
-                } else if (action.type === 'bomb' || action.type === 'scroll') {
-                    state.enemies.forEach(en => {
-                        if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
-                            en.takeDamage(action.data.dmg);
-                            if (action.data.push > 0) {
-                                let angle = Math.atan2(en.y - action.data.y, en.x - action.data.x);
-                                en.x += Math.cos(angle) * action.data.push; en.y += Math.sin(angle) * action.data.push;
-                            }
-                        }
-                    });
-                } else if (action.type === 'enter') {
-                    state.enemies.forEach(en => {
-                        if (distPointToSegment(en.x, en.y, action.data.tx, action.data.ty, action.data.mx, action.data.my) < action.data.w + (en.width || 35)/2) {
-                            en.takeDamage(action.data.dmg);
-                            if (action.data.stun > 0) en.stunTime = Math.max(en.stunTime, action.data.stun);
-                        }
-                    });
-                } else if (action.type === 'aoe_stun') {
-                    state.enemies.forEach(en => {
-                        if (Math.hypot(en.x - action.data.x, en.y - action.data.y) < action.data.r) {
-                            en.stunTime = Math.max(en.stunTime, action.data.stun);
-                        }
-                    });
-                } else if (action.type === 'heal_tower') {
-                    let uid = action.data.uid;
-                    if (state.playersHp && state.playersHp[uid] !== undefined && state.playersHp[uid] > 0) {
-                        state.playersHp[uid] = Math.min(3, state.playersHp[uid] + action.data.amt);
-                    }
-                }
+                applyCoopAction(docSnap.data());
                 deleteDoc(docSnap.ref); 
             });
         }
 
         async function hostSyncLoop() {
-            if (!state.isPlaying || !state.isHost) return;
+            if (!state.isPlaying || !state.isHost || state.coopSubMode === 'shared') return;
             const serialized = JSON.stringify(state.enemies.map(e => [e.id, Math.round(e.x), Math.round(e.y), Math.round(e.hp), e.maxHp, e.stunTime > 0 ? 1 : 0]));
             await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
                 enemiesStr: serialized,
                 mainHp: state.mainHp,
                 playersHp: state.playersHp,
+                score: state.score,
                 wave: state.wave,
+                waveSpawned: state.waveSpawned,
+                waveTotal: state.waveTotal,
                 status: (state.waveSpawned >= state.waveTotal && state.enemies.length === 0 && !state.placingTower) ? 'upgrading' : (state.placingTower ? 'placing' : 'playing')
             });
             setTimeout(hostSyncLoop, 150);
@@ -1743,7 +2435,9 @@
         // ==================== 遊戲狀態控制 ====================
         function updateUI() {
             if (state.mode === 'coop') {
-                document.getElementById('modeTitle').innerText = `合作防線 (共 ${state.players.length} 區)`;
+                document.getElementById('modeTitle').innerText = state.coopSubMode === 'shared'
+                    ? `⚡ 同圖共鬥 (${state.players.length}人)`
+                    : `🛡️ 合作防線 (共 ${state.players.length} 區)`;
                 document.getElementById('scoreDisplay').innerHTML = `${state.score} <span class="text-xs text-slate-300 ml-2">主機: </span><span class="text-red-400 font-bold">${state.mainHp}</span>/20`;
                 document.getElementById('expContainer').classList.add('hidden');
                 document.getElementById('minimapContainer').classList.remove('hidden');
@@ -1835,6 +2529,9 @@
         function removeEnemyLocally(enemy) {
             const index = state.enemies.indexOf(enemy);
             if (index > -1) {
+                if (state.mode === 'coop' && !state.isHost) {
+                    state.recentlyKilled[enemy.id] = performance.now();
+                }
                 createExplosion(enemy.x, enemy.y, enemy.color); playSound('destroy');
                 state.score += 10;
                 
@@ -1924,28 +2621,28 @@
             if (state.placingTower) {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
                 ctx.save(); ctx.translate(-getCameraX(), 0);
+                if (state.mode === 'coop') {
+                    ctx.beginPath(); ctx.rect(getCameraX(), 0, canvas.width, canvas.height); ctx.clip();
+                }
                 drawBackground();
-                
-                // 畫出幽靈預覽
-                if (!state.towerPlaced) {
-                    ctx.globalAlpha = 0.6;
-                    drawSingleTower(state.mouseX, state.mouseY, '#3b82f6', true);
-                    ctx.globalAlpha = 1.0;
-                } else {
-                    drawSingleTower(state.towerX, state.towerY, '#3b82f6', true);
+                if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                    drawSharedTeammates(true);
                 }
                 
-                // 畫出隊友已放置的塔
-                state.players.forEach(uid => {
-                    if (uid !== userId) {
-                        let p = state.playersData[uid];
-                        if (p && p.towerX !== undefined) {
-                            if (p.towerX > getCameraX() - 100 && p.towerX < getCameraX() + canvas.width + 100) {
-                                drawSingleTower(p.towerX, p.towerY, '#10b981', false);
-                            }
-                        }
-                    }
-                });
+                // 畫出自身防區幽靈預覽或已放置防禦塔
+                const myTowerColor = (state.mode === 'coop' && state.coopSubMode === 'shared')
+                    ? COOP_PLAYER_COLORS[state.playerIndex % COOP_PLAYER_COLORS.length]
+                    : '#3b82f6';
+                const maxPlaceOffsetRight = (state.mode === 'coop' && state.coopSubMode === 'shared') ? 120 : 70;
+                if (!state.towerPlaced) {
+                    const previewX = Math.max(getCameraX() + 70, Math.min(getCameraX() + canvas.width - maxPlaceOffsetRight, state.mouseX));
+                    const previewY = Math.max(70, Math.min(canvas.height - 70, state.mouseY));
+                    ctx.globalAlpha = 0.6;
+                    drawSingleTower(previewX, previewY, myTowerColor, true, state.coopSubMode === 'shared' ? { label: `★P${state.playerIndex + 1} (預覽)` } : null);
+                    ctx.globalAlpha = 1.0;
+                } else {
+                    drawSingleTower(state.towerX, state.towerY, myTowerColor, true, state.coopSubMode === 'shared' ? { label: `★P${state.playerIndex + 1} (就緒)` } : null);
+                }
                 
                 ctx.restore();
                 if (state.mode === 'coop') drawMinimap();
@@ -1959,6 +2656,9 @@
                 
                 ctx.save();
                 ctx.translate(-getCameraX(), 0);
+                if (state.mode === 'coop') {
+                    ctx.beginPath(); ctx.rect(getCameraX(), 0, canvas.width, canvas.height); ctx.clip();
+                }
 
                 drawBackground();
 
@@ -2043,6 +2743,9 @@
                         let offset = (s - Math.floor(scatter/2)) * 30;
                         state.bullets.push(new Bullet(state.towerX, state.towerY, state.mouseX + offset, state.mouseY + offset, 15, 2, getWeaponUpgLevel('machinegun','mg_pierce')));
                     }
+                    if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                        sendSharedFx('mg', { sx: Math.round(state.towerX), sy: Math.round(state.towerY), tx: Math.round(state.mouseX), ty: Math.round(state.mouseY), scatter, pierce: getWeaponUpgLevel('machinegun','mg_pierce') });
+                    }
                     state.lastMgShot = timestamp; playSound('shoot');
                 }
 
@@ -2062,14 +2765,17 @@
                 }
 
                 let towerR = 30;
-                let auraX = getCameraX() + canvas.width/2;
+                let auraX = (state.mode === 'coop' && state.coopSubMode === 'shared') ? state.towerX : (getCameraX() + canvas.width/2);
+                let auraY = (state.mode === 'coop' && state.coopSubMode === 'shared') ? state.towerY : (canvas.height/2);
                 let auraR = state.passives.aura > 0 ? 80 + state.passives.aura * 40 : 0;
 
                 // 更新反射彈
+                const minBounceX = state.mode === 'coop' ? getCameraX() : 0;
+                const maxBounceX = state.mode === 'coop' ? (getCameraX() + canvas.width) : getGameWidth();
                 for (let i = state.bounceBullets.length - 1; i >= 0; i--) {
                     let bb = state.bounceBullets[i];
                     if (!bb) continue;
-                    bb.update(dt, getGameWidth(), canvas.height);
+                    bb.update(dt, maxBounceX, canvas.height, minBounceX);
                     bb.draw(ctx);
                     if (bb.life <= 0) { state.bounceBullets.splice(i, 1); continue; }
                     for (let en of state.enemies) {
@@ -2077,7 +2783,7 @@
                             let lastHit = bb.hitIds.get(en.id) || 0;
                             // 設定 0.5 秒 (500ms) 的命中冷卻，避免卡在敵人體內連續傷害
                             if (state.timeElapsed - lastHit > 500) {
-                                en.takeDamage(bb.dmg);
+                                if (!bb.visualOnly) en.takeDamage(bb.dmg);
                                 bb.hitIds.set(en.id, state.timeElapsed);
                                 createExplosion(bb.x, bb.y, '#06b6d4', 5);
                             }
@@ -2094,7 +2800,9 @@
                     let hit = false;
                     for (let en of state.enemies) {
                         if (!b.hitIds.has(en.id) && en.contains(b.x, b.y)) {
-                            en.takeDamage(b.dmg); b.hitIds.add(en.id);
+                            if (!b.visualOnly) en.takeDamage(b.dmg);
+                            else createExplosion(b.x, b.y, b.color, 2);
+                            b.hitIds.add(en.id);
                             if (b.hitIds.size > b.pierce) { hit = true; break; }
                         }
                     }
@@ -2105,7 +2813,17 @@
                 for (let i = state.enemies.length - 1; i >= 0; i--) {
                     let enemy = state.enemies[i];
                     if (!enemy) continue;
-                    enemy.inAura = (auraR > 0 && Math.hypot(enemy.x - auraX, enemy.y - canvas.height/2) < auraR);
+                    let inAnyAura = (!state.isDead && auraR > 0 && Math.hypot(enemy.x - auraX, enemy.y - auraY) < auraR);
+                    if (!inAnyAura && state.mode === 'coop' && state.coopSubMode === 'shared') {
+                        Object.keys(state.remotePlayers).forEach(uid => {
+                            const rp = state.remotePlayers[uid];
+                            const pHp = (state.playersHp && state.playersHp[uid] !== undefined) ? state.playersHp[uid] : 3;
+                            if (rp && rp.aura > 0 && pHp > 0 && Math.hypot(enemy.x - rp.tx, enemy.y - rp.ty) < rp.aura) {
+                                inAnyAura = true;
+                            }
+                        });
+                    }
+                    enemy.inAura = inAnyAura;
                     enemy.update(dt);
                     
                     if (state.mode === 'single' || state.mode === 'tutorial') {
@@ -2114,9 +2832,9 @@
                             state.enemies.splice(i, 1); damageTowerSingle(); continue;
                         }
                     } else if (state.mode === 'coop' && state.isHost) {
-                        // 撞擊最終主機
-                        let mainX = state.players.length * canvas.width;
-                        if (enemy.x > mainX) {
+                        // 撞擊最終主機 (位於地圖最右側內緣)
+                        let mainX = getGameWidth() - 50;
+                        if (enemy.x >= mainX) {
                             state.enemies.splice(i, 1);
                             state.mainHp--;
                             if (state.mainHp <= 0) gameOver();
@@ -2134,6 +2852,11 @@
                                         let dodge = (p.passives && p.passives.dodge) ? p.passives.dodge * 0.1 : 0;
                                         if (Math.random() >= dodge) {
                                             state.playersHp[uid]--;
+                                            if (uid === userId) {
+                                                state.hp = state.playersHp[uid];
+                                                if (state.hp <= 0) state.isDead = true;
+                                                updateUI();
+                                            }
                                             if (p.passives && p.passives.thorns) {
                                                 let dmg = p.passives.thorns * 20;
                                                 state.enemies.forEach(e => e.takeDamage(dmg));
@@ -2159,14 +2882,23 @@
 
                     // 雷射牆碰撞
                     state.walls.forEach(w => {
+                        if (w.visualOnly) return;
                         if (!w.hitIds.has(enemy.id) && distPointToSegment(enemy.x, enemy.y, w.x1, w.y1, w.x2, w.y2) < 20) {
                             enemy.takeDamage(w.dmg); if (w.stun > 0) enemy.stunTime = w.stun;
-                            enemy.vx *= -1; w.hitIds.add(enemy.id); // 反彈
+                            if (state.mode === 'coop') {
+                                let zStart = Math.floor(Math.max(0, enemy.x) / canvas.width) * canvas.width;
+                                enemy.x = Math.max(zStart + 15, enemy.x - 65);
+                                enemy.vx = Math.abs(enemy.vx);
+                            } else {
+                                enemy.vx *= -1; // 單人/教學反彈維持原設定
+                            }
+                            w.hitIds.add(enemy.id);
                         }
                     });
 
                     // V字斬碰撞 (修正為精準的V字線段判定)
                     state.vweapons.forEach(vw => {
+                        if (vw.visualOnly) return;
                         if (!vw.hitIds.has(enemy.id)) {
                             let dist1 = distPointToSegment(enemy.x, enemy.y, vw.x - vw.size/2, vw.y - vw.size, vw.x, vw.y);
                             let dist2 = distPointToSegment(enemy.x, enemy.y, vw.x, vw.y, vw.x + vw.size/2, vw.y - vw.size);
@@ -2178,39 +2910,41 @@
                         }
                     });
                     
-                    if (enemy.x > getCameraX() - 100 && enemy.x < getCameraX() + canvas.width + 100) {
+                    if (state.mode === 'coop') {
+                        if (enemy.x >= getCameraX() - 40 && enemy.x <= getCameraX() + canvas.width + 40) {
+                            enemy.draw(ctx);
+                        }
+                    } else if (enemy.x > getCameraX() - 100 && enemy.x < getCameraX() + canvas.width + 100) {
                         enemy.draw(ctx);
                     }
                 }
 
                 drawTower();
                 
-                // 畫出合作模式最終主機
-                if (state.mode === 'coop') {
-                    let mainX = state.players.length * canvas.width;
-                    if (getCameraX() + canvas.width >= mainX - 100) {
-                        ctx.save();
-                        ctx.translate(mainX, canvas.height / 2);
-                        
-                        // 大幅擴大主機的視覺範圍，覆蓋整個右側邊緣，並對齊撞擊判定線
-                        ctx.fillStyle = '#0f172a'; 
-                        ctx.fillRect(0, -canvas.height / 2, 60, canvas.height);
-                        ctx.strokeStyle = '#facc15'; ctx.lineWidth = 4; 
-                        ctx.strokeRect(0, -canvas.height / 2, 60, canvas.height);
-                        
-                        ctx.fillStyle = '#facc15'; ctx.font = 'bold 24px sans-serif'; ctx.textAlign = 'center';
-                        ctx.fillText('MAIN SERVER', 30, -canvas.height / 2 + 40);
-                        
-                        // 主機血量條
-                        let hpBarHeight = canvas.height - 120;
-                        ctx.fillStyle = '#ef4444'; 
-                        ctx.fillRect(15, -hpBarHeight / 2, 30, hpBarHeight);
-                        ctx.fillStyle = '#10b981';
-                        let hpRatio = Math.max(0, state.mainHp / 20);
-                        ctx.fillRect(15, hpBarHeight / 2 - (hpBarHeight * hpRatio), 30, hpBarHeight * hpRatio);
-                        
-                        ctx.restore();
-                    }
+                // 畫出合作模式最終主機 (接力模式在最後一區最右側；同圖共鬥模式所有人都在最右側看到)
+                if (state.mode === 'coop' && (state.coopSubMode === 'shared' || state.playerIndex === state.players.length - 1)) {
+                    let mainX = getGameWidth() - 50;
+                    ctx.save();
+                    ctx.translate(mainX, canvas.height / 2);
+                    
+                    ctx.fillStyle = '#0f172a'; 
+                    ctx.fillRect(0, -canvas.height / 2, 50, canvas.height);
+                    ctx.strokeStyle = '#facc15'; ctx.lineWidth = 4; 
+                    ctx.strokeRect(0, -canvas.height / 2, 50, canvas.height);
+                    
+                    ctx.fillStyle = '#facc15'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
+                    ctx.fillText('MAIN', 25, -canvas.height / 2 + 28);
+                    ctx.fillText('SERVER', 25, -canvas.height / 2 + 48);
+                    
+                    // 主機血量條
+                    let hpBarHeight = canvas.height - 140;
+                    ctx.fillStyle = '#ef4444'; 
+                    ctx.fillRect(12, -hpBarHeight / 2 + 20, 26, hpBarHeight);
+                    ctx.fillStyle = '#10b981';
+                    let hpRatio = Math.max(0, state.mainHp / 20);
+                    ctx.fillRect(12, hpBarHeight / 2 + 20 - (hpBarHeight * hpRatio), 26, hpBarHeight * hpRatio);
+                    
+                    ctx.restore();
                 }
 
                 ctx.restore(); 
@@ -2222,13 +2956,17 @@
 
             } else {
                 ctx.save(); ctx.translate(-getCameraX(), 0);
+                if (state.mode === 'coop') {
+                    ctx.beginPath(); ctx.rect(getCameraX(), 0, canvas.width, canvas.height); ctx.clip();
+                }
                 drawBackground();
                 state.mapBombs.forEach(mb => mb.draw(ctx));
                 state.particles.forEach(p => p.draw(ctx));
                 state.rings.forEach(r => r.draw(ctx));
-                state.enemies.forEach(e => { if (e.x > getCameraX() - 100 && e.x < getCameraX() + canvas.width + 100) e.draw(ctx); });
+                state.enemies.forEach(e => { if (e.x >= getCameraX() - 40 && e.x <= getCameraX() + canvas.width + 40) e.draw(ctx); });
                 drawTower();
                 ctx.restore();
+                if (state.mode === 'coop') drawMinimap();
             }
 
             requestAnimationFrame(gameLoop);
@@ -2370,11 +3108,15 @@
 
             if (state.mode === 'coop' && state.isHost) {
                 updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { status: 'gameover' });
+                if (rtdb && state.roomId) {
+                    dbRemove(dbRef(rtdb, `coop_rtdb/rooms/${state.roomId}`)).catch(() => {});
+                }
             }
+            cleanupRtdbSync();
         }
 
         async function fetchLeaderboards() {
-            if (!isFirebaseReady) return alert('Firebase 連線異常，無法獲取排行榜');
+            if (!isFirebaseReady) return showToast('Firebase 連線異常，無法獲取排行榜');
             document.getElementById('startModal').classList.add('hidden');
             document.getElementById('leaderboardModal').classList.remove('hidden');
             document.getElementById('lbSingle').innerHTML = '載入中...';
@@ -2406,12 +3148,13 @@
 
         // ==================== 房間連線邏輯 ====================
         async function hostRoom() {
-            state.mode = 'coop'; state.isHost = true;
+            state.mode = 'coop'; state.isHost = true; state.coopSubMode = 'relay';
             state.roomId = Math.random().toString(36).substr(2, 5).toUpperCase();
             
             await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
-                hostId: userId, status: 'waiting', wave: 1, mainHp: 20,
-                players: { [userId]: { name: '指揮官 (房主)', ready: false, passives: state.passives } },
+                hostId: userId, status: 'waiting', coopSubMode: 'relay', wave: 1, mainHp: 20,
+                playerOrder: [userId],
+                players: { [userId]: { name: '指揮官 (房主)', ready: false, passives: state.passives, joinedAt: Date.now() } },
                 enemiesStr: "[]"
             });
             enterLobby();
@@ -2419,50 +3162,90 @@
 
         async function joinRoom() {
             const code = document.getElementById('joinCode').value.toUpperCase();
-            if (code.length !== 5) return alert('請輸入5碼代碼');
+            if (code.length !== 5) return showToast('請輸入 5 碼房間代碼');
             
             const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', code);
             const snap = await getDoc(roomRef);
-            if (!snap.exists()) return alert('找不到該房間');
-            if (snap.data().status !== 'waiting') return alert('遊戲已開始或結束');
+            if (!snap.exists()) return showToast('找不到該房間');
+            if (snap.data().status !== 'waiting') return showToast('該房間遊戲已開始或已結束');
             
+            const existingData = snap.data();
+            const currentOrder = Array.isArray(existingData.playerOrder) ? [...existingData.playerOrder] : Object.keys(existingData.players || {});
+            if (!currentOrder.includes(userId)) currentOrder.push(userId);
+
             state.mode = 'coop'; state.isHost = false; state.roomId = code;
-            await updateDoc(roomRef, { [`players.${userId}`]: { name: '防衛員 (隊友)', ready: false, passives: state.passives } });
+            state.coopSubMode = existingData.coopSubMode || 'relay';
+            await updateDoc(roomRef, {
+                playerOrder: currentOrder,
+                [`players.${userId}`]: { name: `防衛員 #${currentOrder.length}`, ready: false, passives: state.passives, joinedAt: Date.now() }
+            });
             enterLobby();
         }
         
         function enterLobby() {
+            isCoopCanvasMode = true;
+            resize();
             document.getElementById('startModal').classList.add('hidden');
             document.getElementById('lobbyModal').classList.remove('hidden');
             document.getElementById('lobbyCodeDisplay').innerText = state.roomId;
             
             if (state.isHost) document.getElementById('btnStartCoop').classList.remove('hidden');
             else document.getElementById('lobbyWaitText').classList.remove('hidden');
+
+            rtdbProbeDone = false;
+            updateLobbyModeUI();
+            probeRtdbAvailability();
             
             const roomRef = doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId);
             unsubRoom = onSnapshot(roomRef, (snap) => {
                 if (!snap.exists()) return backToMenu();
                 const data = snap.data();
-                state.playersData = data.players;
+                const playerMap = data.players || {};
+                state.playersData = playerMap;
+
+                if (data.coopSubMode && data.coopSubMode !== state.coopSubMode && !state.isPlaying) {
+                    state.coopSubMode = data.coopSubMode;
+                }
+                if (rtdbProbeDone && !isRtdbAvailable && state.coopSubMode === 'shared' && !state.isPlaying) {
+                    state.coopSubMode = 'relay';
+                    if (state.isHost) updateDoc(roomRef, { coopSubMode: 'relay' }).catch(() => {});
+                }
+                updateLobbyModeUI();
+
+                // 鎖定唯一且一致的玩家編號順序
+                const allUids = Object.keys(playerMap);
+                let orderedUids = Array.isArray(data.playerOrder) ? data.playerOrder.filter(uid => playerMap[uid]) : [];
+                const missingUids = allUids.filter(uid => !orderedUids.includes(uid)).sort((a, b) => {
+                    const ta = playerMap[a]?.joinedAt || 0;
+                    const tb = playerMap[b]?.joinedAt || 0;
+                    return ta !== tb ? ta - tb : a.localeCompare(b);
+                });
+                orderedUids = [...orderedUids, ...missingUids];
+                state.players = orderedUids;
+                state.playerIndex = Math.max(0, state.players.indexOf(userId));
+                if (state.isHost && missingUids.length > 0) {
+                    updateDoc(roomRef, { playerOrder: orderedUids }).catch(console.error);
+                }
                 
                 if (data.status === 'waiting') {
-                    state.players = Object.keys(data.players);
-                    state.playerIndex = state.players.indexOf(userId);
-                    document.getElementById('lobbyPlayers').innerHTML = state.players.map((uid, i) => 
-                        `<div class="p-2 border-b border-slate-700 flex justify-between"><span>[防區 ${i+1}] ${data.players[uid].name}</span>${uid === data.hostId ? '<span class="text-yellow-500">房主</span>' : ''}</div>`
-                    ).join('');
+                    document.getElementById('lobbyPlayers').innerHTML = state.players.map((uid, i) => {
+                        const badge = state.coopSubMode === 'shared' ? `[共鬥 P${i+1}]` : `[防區 ${i+1}]`;
+                        const pColor = COOP_PLAYER_COLORS[i % COOP_PLAYER_COLORS.length];
+                        return `<div class="p-2 border-b border-slate-700 flex justify-between items-center"><span style="color:${state.coopSubMode === 'shared' ? pColor : '#e2e8f0'}" class="font-bold">${badge} ${playerMap[uid].name}${uid === userId ? ' (你)' : ''}</span>${uid === data.hostId ? '<span class="text-yellow-500 text-xs font-bold">👑 房主</span>' : ''}</div>`;
+                    }).join('');
                 }
                 
                 if ((data.status === 'placing' || data.status === 'playing') && !state.isPlaying) {
+                    state.coopSubMode = (data.coopSubMode === 'shared' && isRtdbAvailable) ? 'shared' : 'relay';
                     document.getElementById('lobbyModal').classList.add('hidden');
                     startCoopGame(data.players);
                 }
 
                 if (data.status === 'placing' && state.isHost) {
-                    let allReady = Object.values(data.players).every(p => p.ready);
-                    if (allReady && Object.keys(data.players).length === state.players.length) {
+                    let allReady = Object.values(playerMap).every(p => p.ready);
+                    if (allReady && Object.keys(playerMap).length === state.players.length) {
                         let updates = { status: 'playing' };
-                        Object.keys(data.players).forEach(uid => updates[`players.${uid}.ready`] = false);
+                        Object.keys(playerMap).forEach(uid => updates[`players.${uid}.ready`] = false);
                         updateDoc(roomRef, updates);
                     }
                 }
@@ -2473,65 +3256,84 @@
                 }
                 
                 if (state.isPlaying) {
-                    if (data.mainHp !== undefined && state.mainHp !== data.mainHp) {
-                        if (data.mainHp < state.mainHp) {
-                            playSound('hurt');
-                            let mainX = state.players.length * canvas.width - 40;
-                            if (getCameraX() + canvas.width >= mainX) createExplosion(mainX, canvas.height/2, '#facc15', 50);
-                        }
-                        state.mainHp = data.mainHp; updateUI();
-                        if (state.mainHp <= 0) gameOver();
-                    }
-
-                    if (data.playersHp) {
-                        let myHp = data.playersHp[userId];
-                        if (myHp !== undefined && state.hp !== myHp) {
-                            if (myHp < state.hp) {
-                                playSound('hurt');
-                                document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 300);
-                                createExplosion(state.towerX, state.towerY, '#f43f5e', 30);
-                            }
-                            state.hp = myHp; updateUI();
-                            if (state.hp <= 0) state.isDead = true;
-                        }
-                        Object.keys(data.playersHp).forEach(uid => { if (state.playersData[uid]) state.playersData[uid].hp = data.playersHp[uid]; });
-                    }
-                    
                     state.coopTotalSlow = 0;
-                    Object.values(data.players).forEach(p => { state.coopTotalSlow += p.passives.slow || 0; });
-                    
-                    if (!state.isHost && data.enemiesStr) {
-                        try {
-                            const parsed = JSON.parse(data.enemiesStr);
-                            let newEnemies = [];
-                            parsed.forEach(eArr => {
-                                let en = state.enemies.find(ex => ex.id === eArr[0]);
-                                if (!en) en = new Enemy(eArr[0]);
-                                en.serverX = eArr[1]; en.serverY = eArr[2];
-                                en.hp = eArr[3]; en.maxHp = eArr[4]; en.stunTime = eArr[5] > 0 ? 1 : 0;
-                                newEnemies.push(en);
-                            });
-                            state.enemies = newEnemies; 
-                        } catch(e) {}
+                    Object.values(playerMap).forEach(p => { state.coopTotalSlow += (p.passives && p.passives.slow) ? p.passives.slow : 0; });
+
+                    // 接力防區模式由 Firestore 同步戰場狀態；同圖即時共鬥則交由 RTDB 高速同步
+                    if (state.coopSubMode === 'relay') {
+                        if (!state.isHost) {
+                            if (data.waveSpawned !== undefined) state.waveSpawned = data.waveSpawned;
+                            if (data.waveTotal !== undefined) state.waveTotal = data.waveTotal;
+                            if (data.score !== undefined && data.score > state.score) state.score = data.score;
+                        }
+
+                        if (data.mainHp !== undefined && state.mainHp !== data.mainHp) {
+                            if (data.mainHp < state.mainHp) {
+                                playSound('hurt');
+                                let mainX = getGameWidth() - 40;
+                                if (getCameraX() + canvas.width >= mainX) createExplosion(mainX, canvas.height/2, '#facc15', 50);
+                            }
+                            state.mainHp = data.mainHp; updateUI();
+                            if (state.mainHp <= 0) gameOver();
+                        }
+
+                        if (data.playersHp) {
+                            let myHp = data.playersHp[userId];
+                            if (myHp !== undefined && state.hp !== myHp) {
+                                if (myHp < state.hp) {
+                                    playSound('hurt');
+                                    document.body.classList.add('shake'); setTimeout(() => document.body.classList.remove('shake'), 300);
+                                    createExplosion(state.towerX, state.towerY, '#f43f5e', 30);
+                                }
+                                state.hp = myHp; updateUI();
+                                if (state.hp <= 0) state.isDead = true;
+                            }
+                            Object.keys(data.playersHp).forEach(uid => { if (state.playersData[uid]) state.playersData[uid].hp = data.playersHp[uid]; });
+                        }
+                        
+                        if (!state.isHost && data.enemiesStr) {
+                            try {
+                                const nowTs = performance.now();
+                                Object.keys(state.recentlyKilled).forEach(kid => {
+                                    if (nowTs - state.recentlyKilled[kid] > 1500) delete state.recentlyKilled[kid];
+                                });
+                                const parsed = JSON.parse(data.enemiesStr);
+                                let newEnemies = [];
+                                parsed.forEach(eArr => {
+                                    if (state.recentlyKilled[eArr[0]]) return;
+                                    let en = state.enemies.find(ex => ex.id === eArr[0]);
+                                    if (!en) {
+                                        en = new Enemy(eArr[0]);
+                                        en.x = eArr[1]; en.y = eArr[2];
+                                    }
+                                    en.serverX = eArr[1]; en.serverY = eArr[2];
+                                    en.hp = eArr[3]; en.maxHp = eArr[4]; en.stunTime = eArr[5] > 0 ? 1 : 0;
+                                    newEnemies.push(en);
+                                });
+                                state.enemies = newEnemies; 
+                            } catch(e) {}
+                        }
                     }
                     
                     if (data.status === 'upgrading' && !state.isPaused) triggerLevelUp();
                     
                     if (data.status === 'upgrading' && state.isHost) {
-                        let allReady = Object.values(data.players).every(p => p.ready);
+                        let allReady = Object.values(playerMap).every(p => p.ready);
                         if (allReady) {
                             state.wave++; state.waveSpawned = 0; 
                             let pCount = state.players ? state.players.length : 1;
-                            // 數量大量增加：基礎 30 + 隨波次與人數指數攀升
                             state.waveTotal = Math.floor((30 + state.wave * 25) * pCount * (1 + state.wave * 0.1));
-                            let resetReady = {}; Object.keys(data.players).forEach(uid => resetReady[`players.${uid}.ready`] = false);
+                            state.waveTransitioning = false;
+                            let resetReady = {}; Object.keys(playerMap).forEach(uid => resetReady[`players.${uid}.ready`] = false);
                             resetReady.status = 'playing'; resetReady.wave = state.wave;
+                            resetReady.waveSpawned = 0; resetReady.waveTotal = state.waveTotal;
                             updateDoc(roomRef, resetReady);
                         }
                     }
                     
                     if (data.status === 'playing' && state.isPaused) {
                         state.wave = data.wave;
+                        state.waveTransitioning = false;
                         document.getElementById('upgradeModal').classList.add('hidden');
                         state.isPaused = false; lastTime = performance.now();
                         updateUI();
@@ -2543,13 +3345,17 @@
         }
 
         function startCoopGame(playersData) {
+            isCoopCanvasMode = true;
+            resize();
             state.isPlaying = true; state.isPaused = false;
             state.score = 0; state.wave = 1; state.waveSpawned = 0; 
             let pCount = state.players ? state.players.length : 1;
-            // 初始波次敵人總數大量增加
             state.waveTotal = Math.floor(30 * pCount * 1.1); 
             state.maxHp = 3; state.hp = 3; state.isDead = false;
             state.mainHp = 20; state.rerolls = 3;
+            state.recentlyKilled = {};
+            state.remotePlayers = {};
+            state.waveTransitioning = false;
             
             state.lastSpaceTime = 0; state.lastAtTime = 0; state.lastDelTime = 0; 
             state.lastEnterTime = 0; state.lastCtrlXTime = 0; state.lastCtrlCTime = 0;
@@ -2560,15 +3366,20 @@
                 state.players.forEach(uid => state.playersHp[uid] = 3);
             }
             
-            state.enemies = []; state.particles = []; state.shield = null; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = [];
+            state.enemies = []; state.particles = []; state.shield = null; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = [];
             
             state.placingTower = true;
             state.towerPlaced = false;
+            state.towerX = getCameraX() + canvas.width / 2;
+            state.towerY = canvas.height / 2;
+            state.mouseX = state.towerX;
+            state.mouseY = state.towerY;
             
-            document.getElementById('placementBanner').innerText = '請點擊您的防區畫面放置「個人防禦塔」！';
+            document.getElementById('placementBanner').innerText = state.coopSubMode === 'shared'
+                ? `⚡ 同圖即時共鬥：請點擊畫面佈署您的防禦塔 (可即時看到隊友選位)！`
+                : `請點擊您的「第 ${state.playerIndex + 1} 防區」畫面放置個人防禦塔！`;
             document.getElementById('placementBanner').classList.remove('hidden');
 
-            document.getElementById('modeTitle').innerText = '合作防線 (共 ' + state.players.length + ' 區)';
             document.getElementById('roomCodeDisplay').innerText = state.roomId;
             document.getElementById('roomCodeDisplay').classList.remove('hidden');
             
@@ -2579,131 +3390,295 @@
             lastTime = performance.now();
             requestAnimationFrame(gameLoop);
             
-            if (state.isHost) hostSyncLoop();
+            if (state.coopSubMode === 'shared') {
+                startSharedRtdbSync();
+            } else if (state.isHost) {
+                hostSyncLoop();
+            }
         }
 
         function startSingleGame() {
-            state.mode = 'single'; state.isPlaying = true; state.isPaused = false;
-            state.placingTower = false; state.isDead = false;
-            state.towerX = canvas.width / 2; state.towerY = canvas.height / 2;
-            state.score = 0; state.level = 1; state.exp = 0; state.expNeeded = 50; state.maxHp = 3; state.hp = 3; state.rerolls = 3;
-            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = [];
-            
-            state.lastSpaceTime = 0; state.lastAtTime = 0; state.lastDelTime = 0; 
-            state.lastEnterTime = 0; state.lastCtrlXTime = 0; state.lastCtrlCTime = 0;
-            state.lastScrollTime = 0; state.lastBounceTime = 0; state.lastCtrlVTime = 0; state.lastSelectTime = 0;
-            
+            isCoopCanvasMode = false;
+            resize();
+            stopTutorialAnim();
+            cleanupRtdbSync();
+
+            state.mode = 'single';
+            state.isPlaying = true;
+            state.isPaused = false;
+            state.isDead = false;
+            state.placingTower = false;
+            state.towerPlaced = true;
+            state.towerX = canvas.width / 2;
+            state.towerY = canvas.height / 2;
+            state.mouseX = state.towerX;
+            state.mouseY = state.towerY;
+
+            state.score = 0;
+            state.level = 1;
+            state.exp = 0;
+            state.expNeeded = 50;
+            state.maxHp = 3;
+            state.hp = 3;
+            state.rerolls = 3;
+            state.upgradesPending = 0;
+            state.inUpgradeSession = false;
+            state.timeElapsed = 0;
+
+            state.unlockedWeapons = ['laser'];
+            Object.keys(state.weaponUpgrades).forEach(k => state.weaponUpgrades[k] = []);
+            Object.keys(state.passives).forEach(k => state.passives[k] = 0);
+
+            state.enemies = [];
+            state.mapBombs = [];
+            state.particles = [];
+            state.bullets = [];
+            state.walls = [];
+            state.vweapons = [];
+            state.beams = [];
+            state.shield = null;
+            state.rings = [];
+            state.bounceBullets = [];
+            state.grenades = [];
+
+            state.isDragging = false;
+            state.isLeftMouseDown = false;
+            state.ctrlVActive = false;
+            state.tacticalOpen = false;
+            state.lastSpawnTime = performance.now();
+            state.lastBombSpawnTime = performance.now();
+            state.lastAutoclickTime = 0;
+            state.lastCloudTime = performance.now();
+            state.lastMgShot = 0;
+            state.lastSpaceTime = 0;
+            state.lastAtTime = 0;
+            state.lastDelTime = 0;
+            state.lastEnterTime = 0;
+            state.lastCtrlXTime = 0;
+            state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0;
+            state.lastBounceTime = 0;
+            state.lastCtrlVTime = 0;
+            state.lastSelectTime = 0;
+
             document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('placementBanner').classList.add('hidden');
+            document.getElementById('roomCodeDisplay').classList.add('hidden');
             document.getElementById('uiLayer').classList.remove('hidden');
+            document.getElementById('weaponTip').innerText = '提示：移動滑鼠用雷射掃掠敵人！';
+
             updateUI();
-            
             if (audioCtx.state === 'suspended') audioCtx.resume();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startTutorialGame(startStage = 0) {
+            isCoopCanvasMode = false;
+            resize();
+            stopTutorialAnim();
+            cleanupRtdbSync();
+
+            const validStage = (typeof startStage === 'number' && startStage >= 0 && startStage < TUTORIAL_WEAPONS.length) ? startStage : 0;
+
+            state.mode = 'tutorial';
+            state.isPlaying = true;
+            state.isPaused = true;
+            state.isDead = false;
+            state.placingTower = false;
+            state.towerPlaced = true;
+            state.towerX = canvas.width / 2;
+            state.towerY = canvas.height / 2;
+            state.mouseX = state.towerX;
+            state.mouseY = state.towerY;
+
+            state.tutorialStage = validStage;
+            state.tutorialKills = 0;
+            state.tutorialGoal = 10;
+            state.score = 0;
+            state.level = 1;
+            state.maxHp = 3;
+            state.hp = 3;
+            state.timeElapsed = 0;
+
+            state.unlockedWeapons = [TUTORIAL_WEAPONS[validStage]];
+            Object.keys(state.weaponUpgrades).forEach(k => state.weaponUpgrades[k] = []);
+            Object.keys(state.passives).forEach(k => state.passives[k] = 0);
+
+            state.enemies = [];
+            state.mapBombs = [];
+            state.particles = [];
+            state.bullets = [];
+            state.walls = [];
+            state.vweapons = [];
+            state.beams = [];
+            state.shield = null;
+            state.rings = [];
+            state.bounceBullets = [];
+            state.grenades = [];
+
+            state.isDragging = false;
+            state.isLeftMouseDown = false;
+            state.ctrlVActive = false;
+            state.tacticalOpen = false;
+            state.lastSpawnTime = performance.now();
+            state.lastBombSpawnTime = performance.now();
+            state.lastMgShot = 0;
+            state.lastSpaceTime = 0;
+            state.lastAtTime = 0;
+            state.lastDelTime = 0;
+            state.lastEnterTime = 0;
+            state.lastCtrlXTime = 0;
+            state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0;
+            state.lastBounceTime = 0;
+            state.lastCtrlVTime = 0;
+            state.lastSelectTime = 0;
+
+            document.getElementById('startModal').classList.add('hidden');
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('placementBanner').classList.add('hidden');
+            document.getElementById('roomCodeDisplay').classList.add('hidden');
+            document.getElementById('uiLayer').classList.remove('hidden');
+
+            updateUI();
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            showTutorialBriefing();
+            lastTime = performance.now();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function retryTutorialStage() {
+            if (state.mode !== 'tutorial') return;
+            document.getElementById('gameOverModal').classList.add('hidden');
+            document.getElementById('tacticalMenu').classList.add('hidden');
+            document.getElementById('tacticalMenu').classList.remove('flex');
+            state.tacticalOpen = false;
+
+            state.hp = state.maxHp;
+            state.isDead = false;
+            state.tutorialKills = 0;
+            state.isDragging = false;
+            state.isLeftMouseDown = false;
+            state.ctrlVActive = false;
+
+            state.enemies = [];
+            state.mapBombs = [];
+            state.particles = [];
+            state.bullets = [];
+            state.walls = [];
+            state.vweapons = [];
+            state.beams = [];
+            state.shield = null;
+            state.rings = [];
+            state.bounceBullets = [];
+            state.grenades = [];
+
+            state.lastSpaceTime = 0;
+            state.lastAtTime = 0;
+            state.lastDelTime = 0;
+            state.lastEnterTime = 0;
+            state.lastCtrlXTime = 0;
+            state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0;
+            state.lastBounceTime = 0;
+            state.lastCtrlVTime = 0;
+            state.lastSelectTime = 0;
+
+            state.isPlaying = true;
+            state.isPaused = true;
+            updateUI();
+            showTutorialBriefing();
             lastTime = performance.now();
             requestAnimationFrame(gameLoop);
         }
 
         function showTutorialBriefing() {
             state.isPaused = true;
-            let currentWId = TUTORIAL_WEAPONS[state.tutorialStage];
-            let info = TUTORIAL_INFO[currentWId];
-            
-            const caseBanner = document.getElementById('tbCaseBanner');
-            if (info) {
-                document.getElementById('tbIcon').innerText = info.icon;
-                document.getElementById('tbTitle').innerText = `第 ${state.tutorialStage + 1} 關：${info.title}`;
-                document.getElementById('tbActionBadge').innerText = info.action;
-                document.getElementById('tbDesc').innerText = info.desc;
-                document.getElementById('tbGoalBadge').innerText = `過關任務：打敗 ${state.tutorialGoal} 個壞檔案！`;
-                
-                if (currentWId === 'typing') {
-                    // 關卡開始時確定本關全大寫或全小寫
-                    state.tutorialCase = Math.random() < 0.5 ? 'upper' : 'lower';
-                    caseBanner.classList.remove('hidden');
-                    if (state.tutorialCase === 'upper') {
-                        caseBanner.className = 'mb-3 p-3 rounded-2xl border-2 border-amber-400 bg-amber-500/20 text-amber-200 font-black text-base md:text-lg flex items-center justify-center gap-2';
-                        caseBanner.innerText = '🔤 這關全部都是「大寫 A B C」👉 請按 CapsLock 開燈！';
-                    } else {
-                        caseBanner.className = 'mb-3 p-3 rounded-2xl border-2 border-purple-400 bg-purple-500/20 text-purple-200 font-black text-base md:text-lg flex items-center justify-center gap-2';
-                        caseBanner.innerText = '🔤 這關全部都是「小寫 a b c」👉 請關掉 CapsLock！';
-                    }
-                } else {
-                    caseBanner.classList.add('hidden');
-                }
-            }
-            
-            document.getElementById('uiLayer').classList.add('hidden');
-            document.getElementById('tutorialBriefingModal').classList.remove('hidden');
-            startTutorialAnim(currentWId);
-            playSound('wave');
-        }
-
-        function startTutorialGame(startStage = 0) {
-            state.mode = 'tutorial'; state.isPlaying = true; state.isPaused = true;
-            state.placingTower = false; state.isDead = false;
-            state.towerX = canvas.width / 2; state.towerY = canvas.height / 2;
-            state.score = 0; state.maxHp = 10; state.hp = 10; 
-            state.enemies = []; state.particles = []; state.bullets = []; state.walls = []; state.vweapons = []; state.beams = []; state.rings = []; state.bounceBullets = []; state.grenades = []; state.mapBombs = []; state.shield = null;
-            
-            state.tutorialStage = Math.max(0, Math.min(TUTORIAL_WEAPONS.length - 1, startStage));
-            state.tutorialKills = 0;
-            state.tutorialGoal = 10;
-            saveTutorialProgress(state.tutorialStage);
-            
-            document.getElementById('startModal').classList.add('hidden');
-            
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            lastTime = performance.now();
-            requestAnimationFrame(gameLoop);
-            
-            showTutorialBriefing();
-        }
-
-        function retryTutorialStage() {
-            state.isPlaying = true;
-            state.isPaused = true;
-            state.isDead = false;
-            state.hp = 10;
-            state.maxHp = 10;
-            state.tutorialKills = 0;
             state.isDragging = false;
             state.isLeftMouseDown = false;
             state.ctrlVActive = false;
             state.tacticalOpen = false;
             document.getElementById('tacticalMenu').classList.add('hidden');
             document.getElementById('tacticalMenu').classList.remove('flex');
-            
-            state.enemies.length = 0; state.particles.length = 0; state.bullets.length = 0; state.walls.length = 0;
-            state.vweapons.length = 0; state.beams.length = 0; state.rings.length = 0; state.bounceBullets.length = 0;
-            state.grenades.length = 0; state.mapBombs.length = 0; state.shield = null;
 
-            document.getElementById('gameOverModal').classList.add('hidden');
-            
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            lastTime = performance.now();
-            requestAnimationFrame(gameLoop);
-            
-            showTutorialBriefing();
+            state.lastSpaceTime = 0;
+            state.lastAtTime = 0;
+            state.lastDelTime = 0;
+            state.lastEnterTime = 0;
+            state.lastCtrlXTime = 0;
+            state.lastCtrlCTime = 0;
+            state.lastScrollTime = 0;
+            state.lastBounceTime = 0;
+            state.lastCtrlVTime = 0;
+            state.lastSelectTime = 0;
+
+            const wId = TUTORIAL_WEAPONS[state.tutorialStage];
+            const info = TUTORIAL_INFO[wId] || { icon: '🎮', title: WEAPONS[wId]?.name || '', action: WEAPONS[wId]?.tip || '', desc: '' };
+
+            const caseBanner = document.getElementById('tbCaseBanner');
+            if (wId === 'typing') {
+                state.tutorialCase = Math.random() < 0.5 ? 'upper' : 'lower';
+                caseBanner.classList.remove('hidden');
+                if (state.tutorialCase === 'upper') {
+                    caseBanner.className = 'mb-3 p-3 rounded-2xl border-2 border-emerald-400 bg-emerald-900/50 text-emerald-200 font-black text-base md:text-lg flex items-center justify-center gap-3';
+                    caseBanner.innerHTML = '<span>🔠</span><span>這關全部是「大寫 A~Z」！先按 CapsLock 把大寫燈打開 💡</span>';
+                } else {
+                    caseBanner.className = 'mb-3 p-3 rounded-2xl border-2 border-purple-400 bg-purple-900/50 text-purple-200 font-black text-base md:text-lg flex items-center justify-center gap-3';
+                    caseBanner.innerHTML = '<span>🔡</span><span>這關全部是「小寫 a~z」！記得把 CapsLock 大寫燈關掉喔 ✨</span>';
+                }
+            } else {
+                caseBanner.classList.add('hidden');
+            }
+
+            document.getElementById('tbIcon').innerText = info.icon;
+            document.getElementById('tbTitle').innerText = `第 ${state.tutorialStage + 1} 關：${info.title}`;
+            document.getElementById('tbActionBadge').innerText = info.action;
+            document.getElementById('tbDesc').innerText = info.desc;
+            document.getElementById('tbGoalBadge').innerText = `過關任務：打敗 ${state.tutorialGoal} 個壞檔案！`;
+
+            document.getElementById('tutorialBriefingModal').classList.remove('hidden');
+            updateUI();
+            startTutorialAnim(wId);
         }
 
         function showCertificate() {
             state.isPlaying = false;
+            state.isPaused = true;
             stopTutorialAnim();
-            document.getElementById('uiLayer').classList.add('hidden');
-            document.getElementById('certDate').innerText = new Date().toLocaleDateString();
-            document.getElementById('certificateModal').classList.remove('hidden');
             playSound('levelup');
+            document.getElementById('tacticalMenu').classList.add('hidden');
+            document.getElementById('tacticalMenu').classList.remove('flex');
+            document.getElementById('tutorialBriefingModal').classList.add('hidden');
+            const now = new Date();
+            document.getElementById('certDate').innerText = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')}`;
+            document.getElementById('certificateModal').classList.remove('hidden');
         }
-        
+
         function backToMenu() {
+            state.isPlaying = false;
+            state.placingTower = false;
+            isCoopCanvasMode = false;
+            resize();
             stopTutorialAnim();
-            try { if (typeof unsubRoom === 'function') unsubRoom(); } catch(e){}
-            try { if (typeof unsubActions === 'function') unsubActions(); } catch(e){}
+            if (state.mode === 'coop' && state.isHost && rtdb && state.roomId) {
+                dbRemove(dbRef(rtdb, `coop_rtdb/rooms/${state.roomId}`)).catch(() => {});
+            } else if (state.mode === 'coop' && rtdb && state.roomId && userId) {
+                dbRemove(dbRef(rtdb, `coop_rtdb/rooms/${state.roomId}/cursors/${userId}`)).catch(() => {});
+            }
+            cleanupRtdbSync();
+            try { if (typeof unsubRoom === 'function') unsubRoom(); unsubRoom = null; } catch(e){}
+            try { if (typeof unsubActions === 'function') unsubActions(); unsubActions = null; } catch(e){}
+            state.roomId = null;
             
             // 如果瀏覽器攔截 reload 導致按鈕無效，這段安全備案會強行將所有畫面隱藏並叫出主選單
             setTimeout(() => {
                 document.getElementById('gameOverModal').classList.add('hidden');
                 document.getElementById('certificateModal').classList.add('hidden');
                 document.getElementById('tutorialBriefingModal').classList.add('hidden');
+                document.getElementById('upgradeModal').classList.add('hidden');
+                document.getElementById('placementBanner').classList.add('hidden');
                 document.getElementById('lobbyModal').classList.add('hidden');
                 document.getElementById('uiLayer').classList.add('hidden');
                 document.getElementById('startModal').classList.remove('hidden');
@@ -2726,19 +3701,23 @@
             let y = state.tacticalY;
             let sx = state.towerX;
             let sy = state.towerY;
+            let r = 50;
 
             if (type === 'ap') {
                 let dmg = 150 + getWeaponUpgLevel('select','sel_dmg')*100;
-                let r = 50;
+                r = 50;
                 state.grenades.push(new Grenade(sx, sy, x, y, 'ap', dmg, r, 0));
             } else if (type === 'frag') {
                 let dmg = 25 + getWeaponUpgLevel('select','sel_aoe')*15;
-                let r = 250 + getWeaponUpgLevel('select','sel_aoe')*60;
+                r = 250 + getWeaponUpgLevel('select','sel_aoe')*60;
                 state.grenades.push(new Grenade(sx, sy, x, y, 'frag', dmg, r, 0));
             } else if (type === 'stun') {
-                let r = 300 + getWeaponUpgLevel('select','sel_stun')*50;
+                r = 300 + getWeaponUpgLevel('select','sel_stun')*50;
                 let stun = 4 + getWeaponUpgLevel('select','sel_stun')*1.5;
                 state.grenades.push(new Grenade(sx, sy, x, y, 'stun', 0, r, stun));
+            }
+            if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                sendSharedFx('grenade', { sx: Math.round(sx), sy: Math.round(sy), tx: Math.round(x), ty: Math.round(y), gType: type, r });
             }
         }
 
@@ -2761,8 +3740,10 @@
                             else { state.hp = Math.min(state.maxHp, state.hp + 1); updateUI(); }
                         }
                         
-                        if (state.mode === 'coop') sendCoopAction('bomb', {x:mb.x, y:mb.y, r:r, dmg:dmg});
-                        else {
+                        if (state.mode === 'coop') {
+                            sendCoopAction('bomb', {x:mb.x, y:mb.y, r:r, dmg:dmg});
+                            if (state.coopSubMode === 'shared') sendSharedFx('typing', { x: Math.round(mb.x), y: Math.round(mb.y), r });
+                        } else {
                             state.enemies.slice().forEach(en => { if (Math.hypot(en.x-mb.x, en.y-mb.y) < r) en.takeDamage(dmg); });
                         }
                         state.mapBombs.splice(i, 1);
@@ -2779,7 +3760,6 @@
                     state.lastSpaceTime = performance.now(); playSound('wave');
                     document.body.style.backgroundColor = '#3b0764'; setTimeout(() => document.body.style.backgroundColor = '#0f172a', 150);
                     
-                    // 新增動畫：全畫面紫色力場爆發特效
                     createExplosion(getCameraX() + canvas.width/2, canvas.height/2, '#8b5cf6', 80);
 
                     let duration = 4.0 + getWeaponUpgLevel('space','space_time')*2.0;
@@ -2792,6 +3772,7 @@
                     let maxX = minX + canvas.width;
                     if (state.mode === 'coop') {
                         sendCoopAction('sleep', {duration, minX, maxX});
+                        if (state.coopSubMode === 'shared') sendSharedFx('space', { x: Math.round(state.towerX), y: Math.round(state.towerY) });
                     } else {
                         state.enemies.slice().forEach(en => {
                             if (en.x >= minX - 100 && en.x <= maxX + 100) {
@@ -2810,18 +3791,19 @@
                 if (performance.now() - state.lastAtTime > cd || state.lastAtTime === 0) {
                     state.lastAtTime = performance.now(); playSound('wave');
                     
-                    // 新增動畫：主機綠色大爆發與背景閃爍
                     createExplosion(state.towerX, state.towerY, '#22c55e', 50); 
                     document.body.style.backgroundColor = '#14532d'; setTimeout(() => document.body.style.backgroundColor = '#0f172a', 150);
 
                     let dmg = 10 + getWeaponUpgLevel('at','at_dmg')*15;
                     let stun = getWeaponUpgLevel('at','at_stun') > 0 ? 1.0 + getWeaponUpgLevel('at','at_stun')*1.0 : 0;
                     if (getWeaponUpgLevel('at','at_heal') > 0 && Math.random() < 0.4) {
-                        if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt:1});
+                        if (state.mode === 'coop') sendCoopAction('heal_tower', {uid: userId, amt: 1});
                         else { state.hp = Math.min(state.maxHp, state.hp + 1); updateUI(); }
                     }
-                    if (state.mode === 'coop') sendCoopAction('refresh', {push: 800, dmg, stun});
-                    else {
+                    if (state.mode === 'coop') {
+                        sendCoopAction('refresh', {push: 800, dmg, stun, minX: getCameraX(), maxX: getCameraX() + canvas.width});
+                        if (state.coopSubMode === 'shared') sendSharedFx('at', { x: Math.round(state.towerX), y: Math.round(state.towerY) });
+                    } else {
                         const cx = state.towerX, cy = state.towerY;
                         state.enemies.slice().forEach(en => {
                             en.x = cx + Math.cos(Math.atan2(en.y-cy, en.x-cx)) * 800; en.takeDamage(dmg); en.stunTime = stun;
@@ -2838,15 +3820,20 @@
                     state.lastDelTime = performance.now(); playSound('destroy');
                     
                     let target = null; let minDist = Infinity;
+                    const minX = getCameraX();
+                    const maxX = minX + canvas.width;
                     state.enemies.forEach(en => {
+                        if (state.mode === 'coop' && (en.x < minX || en.x > maxX)) return;
                         let d = Math.hypot(en.x - state.mouseX, en.y - state.mouseY);
                         if (d < minDist) { target = en; minDist = d; }
                     });
                     
                     if (target) {
-                        // 新增動畫：命中目標產生爆炸與紅光連接
                         createExplosion(target.x, target.y, '#ef4444', 30);
                         state.beams.push(new Beam(state.towerX, state.towerY, target.x, target.y, 4, '#ef4444'));
+                        if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                            sendSharedFx('del', { sx: Math.round(state.towerX), sy: Math.round(state.towerY), tx: Math.round(target.x), ty: Math.round(target.y) });
+                        }
 
                         let dmg = 25 + getWeaponUpgLevel('del','del_dmg')*15;
                         if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: target.id, dmg});
@@ -2878,8 +3865,12 @@
                     
                     state.beams.push(new Beam(state.towerX, state.towerY, endX, endY, width, '#f59e0b'));
                     
-                    if (state.mode === 'coop') sendCoopAction('enter', {tx: state.towerX, ty: state.towerY, mx: endX, my: endY, w: width, dmg, stun});
-                    else {
+                    if (state.mode === 'coop') {
+                        sendCoopAction('enter', {tx: state.towerX, ty: state.towerY, mx: endX, my: endY, w: width, dmg, stun});
+                        if (state.coopSubMode === 'shared') {
+                            sendSharedFx('enter', { sx: Math.round(state.towerX), sy: Math.round(state.towerY), ex: Math.round(endX), ey: Math.round(endY), w: width });
+                        }
+                    } else {
                         state.enemies.slice().forEach(en => {
                             if (distPointToSegment(en.x, en.y, state.towerX, state.towerY, endX, endY) < width + en.width/2) {
                                 en.takeDamage(dmg); if (stun > 0) en.stunTime = Math.max(en.stunTime, stun);
@@ -2901,16 +3892,17 @@
                         
                         let cutArea = { x: state.mouseX, y: state.mouseY, w: w, h: h };
                         
-                        // 修正動畫：不再用 ctx 直接畫（會立刻被清除），改存入 state.beams，產生帥氣的交叉光束動畫，且會漸漸淡出
                         state.beams.push(new Beam(cutArea.x - w/2, cutArea.y - h/2, cutArea.x + w/2, cutArea.y + h/2, 12, '#f43f5e'));
                         state.beams.push(new Beam(cutArea.x - w/2, cutArea.y + h/2, cutArea.x + w/2, cutArea.y - h/2, 12, '#f43f5e'));
+                        if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                            sendSharedFx('ctrlx', { x: Math.round(cutArea.x), y: Math.round(cutArea.y), w, h });
+                        }
                         
                         let dmg = 10;
-                        // 修正 X斬 的傷害判定，必須碰到 X 的兩條交叉線段才算命中
                         state.enemies.slice().forEach(en => {
                             let dist1 = distPointToSegment(en.x, en.y, cutArea.x - w/2, cutArea.y - h/2, cutArea.x + w/2, cutArea.y + h/2);
                             let dist2 = distPointToSegment(en.x, en.y, cutArea.x - w/2, cutArea.y + h/2, cutArea.x + w/2, cutArea.y - h/2);
-                            let hitThickness = 30; // 給予線條足夠的寬容度
+                            let hitThickness = 30;
                             if (dist1 < hitThickness + en.width/2 || dist2 < hitThickness + en.width/2) {
                                 if (state.mode === 'coop' && !state.isHost) sendCoopAction('damage', {id: en.id, dmg});
                                 else en.takeDamage(dmg);
@@ -2942,6 +3934,9 @@
                         let dmg = 2 + getWeaponUpgLevel('ctrlv','paste_dmg')*2;
                         let stun = getWeaponUpgLevel('ctrlv','paste_stun') > 0;
                         state.vweapons.push(new VWeapon(state.mouseX, state.mouseY, size, dmg, stun));
+                        if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                            sendSharedFx('ctrlv', { x: Math.round(state.mouseX), y: Math.round(state.mouseY), size, tx: Math.round(state.towerX), ty: Math.round(state.towerY) });
+                        }
                     }
                 }
             }
@@ -2954,6 +3949,8 @@
         // 雙擊反射彈
         window.addEventListener('dblclick', (e) => {
             if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            const pos = getCanvasMousePos(e);
+            state.mouseX = pos.x; state.mouseY = pos.y;
             if (state.unlockedWeapons.includes('bounce')) {
                 let cd = getCD(3000 - getWeaponUpgLevel('bounce','bounce_cd')*500);
                 if (performance.now() - state.lastBounceTime > cd || state.lastBounceTime === 0) {
@@ -2962,6 +3959,9 @@
                     let maxLife = 4000 + getWeaponUpgLevel('bounce','bounce_life')*2000;
                     
                     state.bounceBullets.push(new BounceBullet(state.towerX, state.towerY, state.mouseX, state.mouseY, 500, dmg, maxLife));
+                    if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                        sendSharedFx('bounce', { sx: Math.round(state.towerX), sy: Math.round(state.towerY), tx: Math.round(state.mouseX), ty: Math.round(state.mouseY), life: maxLife });
+                    }
                 }
             }
         });
@@ -2981,8 +3981,10 @@
                     state.rings.push(new WaveRing(state.towerX, state.towerY, r, '#0ea5e9'));
                     createExplosion(state.towerX, state.towerY, '#0ea5e9', 30);
                     
-                    if (state.mode === 'coop') sendCoopAction('scroll', {x: state.towerX, y: state.towerY, r, dmg, push});
-                    else {
+                    if (state.mode === 'coop') {
+                        sendCoopAction('scroll', {x: state.towerX, y: state.towerY, r, dmg, push});
+                        if (state.coopSubMode === 'shared') sendSharedFx('scroll', { x: Math.round(state.towerX), y: Math.round(state.towerY), r });
+                    } else {
                         state.enemies.slice().forEach(en => {
                             if (Math.hypot(en.x - state.towerX, en.y - state.towerY) < r) {
                                 en.takeDamage(dmg);
@@ -3000,6 +4002,8 @@
         window.addEventListener('contextmenu', (e) => {
             e.preventDefault();
             if (!state.isPlaying || state.isPaused || state.placingTower || state.isDead) return;
+            const pos = getCanvasMousePos(e);
+            state.mouseX = pos.x; state.mouseY = pos.y;
             if (state.unlockedWeapons.includes('select')) {
                 let cd = getCD(10000);
                 if (performance.now() - state.lastSelectTime > cd || state.lastSelectTime === 0) {
@@ -3025,12 +4029,16 @@
                 state.tacticalOpen = false;
             }
             if (!state.isPlaying || state.isPaused || state.isDead) return;
-            
-            // 處理合作模式的主機放置邏輯
+
+            const pos = getCanvasMousePos(e);
+            state.mouseX = pos.x;
+            state.mouseY = pos.y;
+            // 處理合作模式的主機放置邏輯 (接力模式限於個人防區，同圖模式避開右側主機區)
             if (state.mode === 'coop' && state.placingTower) {
                 if (!state.towerPlaced) {
-                    state.towerX = state.mouseX;
-                    state.towerY = state.mouseY;
+                    const maxRightMargin = state.coopSubMode === 'shared' ? 120 : 70;
+                    state.towerX = Math.max(getCameraX() + 70, Math.min(getCameraX() + canvas.width - maxRightMargin, state.mouseX));
+                    state.towerY = Math.max(70, Math.min(canvas.height - 70, state.mouseY));
                     state.towerPlaced = true;
                     
                     updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { 
@@ -3055,8 +4063,9 @@
         window.addEventListener('mousemove', (e) => {
             if (!state.isPlaying || state.isPaused) return;
             state.lastMouseX = state.mouseX; state.lastMouseY = state.mouseY;
-            state.mouseX = e.clientX + getCameraX(); 
-            state.mouseY = e.clientY;
+            const pos = getCanvasMousePos(e);
+            state.mouseX = pos.x; 
+            state.mouseY = pos.y;
             
             if (state.placingTower || state.isDead) return;
 
@@ -3105,6 +4114,9 @@
                         let dmg = 1 + getWeaponUpgLevel('laserwall','wall_dmg')*2;
                         let stun = getWeaponUpgLevel('laserwall','wall_stun') > 0 ? 1 : 0;
                         state.walls.push(new WallSegment(state.lastWallX, state.lastWallY, state.mouseX, state.mouseY, life, dmg, stun));
+                        if (state.mode === 'coop' && state.coopSubMode === 'shared') {
+                            sendSharedFx('wall', { x1: Math.round(state.lastWallX), y1: Math.round(state.lastWallY), x2: Math.round(state.mouseX), y2: Math.round(state.mouseY), life });
+                        }
                         state.lastWallX = state.mouseX; state.lastWallY = state.mouseY;
                     }
                 }
@@ -3122,8 +4134,10 @@
                         let dmg = 10 + getWeaponUpgLevel('bomb','bomb_radius')*5;
                         createExplosion(state.mouseX, state.mouseY, '#f97316', 40); playSound('bomb');
                         
-                        if (state.mode === 'coop') sendCoopAction('bomb', {x:state.mouseX, y:state.mouseY, r:r, dmg:dmg});
-                        else {
+                        if (state.mode === 'coop') {
+                            sendCoopAction('bomb', {x:state.mouseX, y:state.mouseY, r:r, dmg:dmg});
+                            if (state.coopSubMode === 'shared') sendSharedFx('bomb', { x: Math.round(state.mouseX), y: Math.round(state.mouseY), r });
+                        } else {
                             state.enemies.slice().forEach(en => {
                                 if (Math.hypot(en.x - state.mouseX, en.y - state.mouseY) < r) {
                                     en.takeDamage(dmg);
@@ -3147,13 +4161,34 @@
         document.getElementById('btnSingle').addEventListener('click', startSingleGame);
         document.getElementById('btnHost').addEventListener('click', hostRoom);
         document.getElementById('btnJoin').addEventListener('click', joinRoom);
+        document.getElementById('btnModeRelay').addEventListener('click', () => {
+            if (!state.isHost || !state.roomId) return;
+            state.coopSubMode = 'relay';
+            updateLobbyModeUI();
+            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { coopSubMode: 'relay' }).catch(console.error);
+        });
+        document.getElementById('btnModeShared').addEventListener('click', () => {
+            if (!state.isHost || !state.roomId) return;
+            if (!isRtdbAvailable) {
+                showToast('⚠️ 即時資料庫免費額度已用完或無法連線，無法選擇此模式');
+                return;
+            }
+            state.coopSubMode = 'shared';
+            updateLobbyModeUI();
+            updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { coopSubMode: 'shared' }).catch(console.error);
+        });
         document.getElementById('btnStartCoop').addEventListener('click', () => {
             if (state.isHost && state.roomId) {
-                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), { status: 'placing' });
+                const finalSubMode = (state.coopSubMode === 'shared' && isRtdbAvailable) ? 'shared' : 'relay';
+                updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'rooms', state.roomId), {
+                    status: 'placing',
+                    coopSubMode: finalSubMode
+                });
             }
         });
         document.getElementById('btnLeaveLobby').addEventListener('click', backToMenu);
         document.getElementById('restartBtn').addEventListener('click', backToMenu);
+        document.getElementById('btnCertBack').addEventListener('click', backToMenu);
 
         document.getElementById('btnStartTutorialStage').addEventListener('click', () => {
             stopTutorialAnim();
